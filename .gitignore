@@ -1,3 +1,5 @@
+.DS_Store
+*.splatv
 # Logs
 logs
 *.log
