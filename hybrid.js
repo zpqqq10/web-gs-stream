@@ -6,6 +6,7 @@ import { Manager } from "./src/Manager.js";
 const ToolWorkerUrl = './src/workers/toolWorker.js';
 const PlyWorkerUrl = './src/workers/plyWorker.js';
 const VideoDownloaderUrl = './src/workers/videoDownloader.js';
+const CBDownloaderUrl = './src/workers/cbDownloader.js';
 
 let cameras = [
   {
@@ -47,7 +48,9 @@ async function main() {
   const toolWorker = new Worker(ToolWorkerUrl);
   const plyWorker = new Worker(PlyWorkerUrl, { type: 'module' });
   const downloader = new Worker(VideoDownloaderUrl, { type: 'module' });
+  const cbdownloader = new Worker(CBDownloaderUrl, { type: 'module' });
   downloader.postMessage({ msg: 'init' });
+  cbdownloader.postMessage({ msg: 'init' });
   plyWorker.postMessage({ msg: 'init' });
   const canvas = document.getElementById("canvas");
   const fps = document.getElementById("fps");
@@ -240,6 +243,23 @@ async function main() {
         }
       }
 
+    }
+  };
+
+  cbdownloader.onmessage = async (e) => {
+    if (e.data.msg && e.data.msg == 'ready') {
+      // do nothing
+    } else if (e.data.type && e.data.type == FTYPES.cb) {
+      const { data, keyframe, type } = e.data;
+      // const plyDataBuffer = new Uint8Array(data);
+      manager.appendOneBuffer(data, keyframe, type);
+      // load next group
+      let nextIdx = manager.getNextIndex(type);
+      if (nextIdx < 0) {
+        cbdownloader.postMessage({ msg: 'finish' });
+      } else {
+        cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+      }
     }
   };
 
@@ -755,6 +775,7 @@ async function main() {
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
+  cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
 
   // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
