@@ -1,3 +1,12 @@
+export const FTYPES = {
+    ply: 1,
+    highxyz: 2,
+    lowxyz: 3,
+    rot: 4, 
+    cb: 5
+};
+
+
 export function attachShaders(gl, vertexShaderSource, fragmentShaderSource) {
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vertexShader, vertexShaderSource);
@@ -41,4 +50,12 @@ export async function readChunks(reader, chunks, handleChunk) {
         handleChunk(chunk, buffer.buffer, buffer.byteLength - offset, chunks);
     }
     if (chunk) handleChunk(chunk, buffer.buffer, 0, chunks);
+}
+
+export async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function padZeroStart(str, n = 6) {
+    return (Array(n).join(0) + str).slice(-n);
 }

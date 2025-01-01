@@ -1,8 +1,11 @@
-import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSSahders.js";
+import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSTVSahders.js";
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4 } from "./src/utils/mathUtils.js";
-import { attachShaders, readChunks } from "./src/utils/utils.js";
+import { attachShaders, readChunks, padZeroStart, FTYPES, sleep } from "./src/utils/utils.js";
+import { Manager } from "./src/Manager.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
+const PlyWorkerUrl = './src/workers/plyWorker.js';
+const VideoDownloaderUrl = './src/workers/videoDownloader.js';
 
 let cameras = [
   {
@@ -25,6 +28,10 @@ let camera = cameras[0];
 let defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
 
 let viewMatrix = defaultViewMatrix;
+let gsvMeta = {};
+let keyframes = [];
+let manager = new Manager();
+
 async function main() {
   let carousel = false;
   const params = new URLSearchParams(location.search);
@@ -36,12 +43,14 @@ async function main() {
   const rowLength = 3 * 4 + 3 * 4 + 4 + 4;
   let splatData = new Uint8Array([]);
   const downsample = splatData.length / rowLength > 500000 ? 1 : 1 / devicePixelRatio;
-  console.log(splatData.length / rowLength, downsample);
 
-  const worker = new Worker(ToolWorkerUrl);
+  const toolWorker = new Worker(ToolWorkerUrl);
+  const plyWorker = new Worker(PlyWorkerUrl, { type: 'module' });
+  const downloader = new Worker(VideoDownloaderUrl, { type: 'module' });
+  downloader.postMessage({ msg: 'init' });
+  plyWorker.postMessage({ msg: 'init' });
   const canvas = document.getElementById("canvas");
   const fps = document.getElementById("fps");
-  //   const camid = document.getElementById("camid");
 
   let projectionMatrix;
 
@@ -103,7 +112,7 @@ async function main() {
   window.addEventListener("resize", resize);
   resize();
 
-  worker.onmessage = (e) => {
+  toolWorker.onmessage = (e) => {
     if (e.data.texdata) {
       const { texdata, texwidth, texheight } = e.data;
 
@@ -140,6 +149,100 @@ async function main() {
     }
   };
 
+  plyWorker.onmessage = async (e) => {
+    if (e.data.msg && e.data.msg == 'ready') {
+      document.getElementById("message").innerText = 'ply decoder ready';
+      manager.initDrcDecoder();
+    } else if (e.data.type && e.data.type == FTYPES.ply) {
+      const { data, keyframe, type } = e.data;
+      // const plyDataBuffer = new Uint8Array(data);
+      manager.appendOneBuffer(data, keyframe, type);
+      // load next group
+      let nextIdx = manager.getNextIndex(type);
+      if (nextIdx < 0) {
+        plyWorker.postMessage({ msg: 'finish' });
+      } else {
+        plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+      }
+    }
+  };
+
+  downloader.onmessage = async (e) => {
+    if (e.data.msg && e.data.msg == 'ready') {
+      // do nothing
+    } else if (e.data.type) {
+      const { data, keyframe, type } = e.data;
+      // const plyDataBuffer = new Uint8Array(data);
+      // determine which to use
+      let videoEleName = '';
+      let canvasEleName = '';
+      switch (type) {
+        case FTYPES.lowxyz:
+          videoEleName = 'lowxyzVideo';
+          canvasEleName = 'lowxyzCanvas';
+          break;
+        case FTYPES.highxyz:
+          videoEleName = 'highxyzVideo';
+          canvasEleName = 'highxyzCanvas';
+          break;
+        case FTYPES.rot:
+          videoEleName = 'rotVideo';
+          canvasEleName = 'rotCanvas';
+          break;
+        default:
+          throw new Error('unknown type');
+      }
+
+      const videoEle = document.getElementById(videoEleName);
+      const canvasEle = document.getElementById(canvasEleName);
+      const captureCtx = canvasEle.getContext('2d', { willReadFrequently: true });
+
+      const blob = new Blob([data], { type: 'video/mp4' });
+      const videoUrl = URL.createObjectURL(blob);
+      videoEle.src = videoUrl;
+
+      // TODO 这里可能会有性能问题
+      await startFrameCapture();
+      async function startFrameCapture() {
+        try {
+          // 确保视频可以播放
+          await new Promise((resolve, reject) => {
+            videoEle.oncanplay = resolve;
+            videoEle.onerror = reject;
+          });
+
+          // 开始逐帧捕获
+          for (let currentTime = 0; currentTime < videoEle.duration; currentTime += gsvMeta.frameDuration) {
+
+            videoEle.pause()
+            videoEle.currentTime = currentTime;
+            await new Promise((resolve) => {
+              videoEle.onseeked = resolve;
+            });
+
+            // 捕获当前帧
+            captureCtx.drawImage(videoEle, 0, 0, canvasEle.width, canvasEle.height);
+
+            // 获取帧的像素数据
+            const imageData = captureCtx.getImageData(0, 0, canvasEle.width, canvasEle.height);
+            manager.appendOneBuffer(imageData.data.buffer, keyframe, type);
+          }
+          manager.incrementVideoLoaded(type);
+
+          let nextIdx = manager.getNextIndex(type);
+          if (nextIdx < 0) {
+            downloader.postMessage({ msg: 'finish' });
+          } else {
+            downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx], type: type });
+          }
+        } catch (error) {
+          console.error('Error during frame capture:', error);
+        }
+      }
+
+    }
+  };
+
   let activeKeys = [];
   let currentCameraIndex = 0;
 
@@ -160,13 +263,10 @@ async function main() {
       currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
       viewMatrix = getViewMatrix(cameras[currentCameraIndex]);
     }
-    // camid.innerText = "cam  " + currentCameraIndex;
     if (e.code == "KeyV") {
       location.hash = "#" + JSON.stringify(viewMatrix.map((k) => Math.round(k * 100) / 100));
-      //   camid.innerText = "";
     } else if (e.code === "KeyP") {
       carousel = true;
-      //   camid.innerText = "";
     }
   });
   window.addEventListener("keyup", (e) => {
@@ -352,14 +452,6 @@ async function main() {
   let avgFps = 0;
   let start = 0;
 
-  window.addEventListener("gamepadconnected", (e) => {
-    const gp = navigator.getGamepads()[e.gamepad.index];
-    console.log(`Gamepad connected at index ${gp.index}: ${gp.id}. It has ${gp.buttons.length} buttons and ${gp.axes.length} axes.`);
-  });
-  window.addEventListener("gamepaddisconnected", (e) => {
-    console.log("Gamepad disconnected");
-  });
-
   let leftGamepadTrigger, rightGamepadTrigger;
 
   const frame = (now) => {
@@ -500,13 +592,13 @@ async function main() {
     let actualViewMatrix = invert4(inv2);
 
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
-    worker.postMessage({ view: viewProj });
+    toolWorker.postMessage({ view: viewProj });
 
     const currentFps = 1000 / (now - lastFrame) || 0;
     avgFps = (isFinite(avgFps) && avgFps) * 0.9 + currentFps * 0.1;
 
     if (vertexCount > 0) {
-      document.getElementById("spinner").style.display = "none";
+      // document.getElementById("spinner").style.display = "none";
       gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
       gl.uniform1f(u_time, Math.sin(Date.now() / 1000) / 2 + 1 / 2);
 
@@ -514,7 +606,7 @@ async function main() {
       gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
     } else {
       gl.clear(gl.COLOR_BUFFER_BIT);
-      document.getElementById("spinner").style.display = "";
+      // document.getElementById("spinner").style.display = "";
       start = Date.now() + 2000;
     }
     const progress = (100 * vertexCount) / (splatData.length / rowLength);
@@ -550,7 +642,7 @@ async function main() {
 
         if (splatData[0] == 112 && splatData[1] == 108 && splatData[2] == 121 && splatData[3] == 10) {
           // ply file magic header means it should be handled differently
-          worker.postMessage({ ply: splatData.buffer });
+          toolWorker.postMessage({ ply: splatData.buffer });
         } else if (splatData[0] == 75 && splatData[1] == 103) {
           // splatv file
           readChunks(new Response(splatData).body.getReader(), [{ size: 8, type: "magic" }], chunkHandler).then(() => {
@@ -604,7 +696,7 @@ async function main() {
     } else if (chunk.type === "splat") {
       if (vertexCount > lastVertexCount || remaining === 0) {
         lastVertexCount = vertexCount;
-        worker.postMessage({ texture: new Float32Array(buffer), remaining: remaining });
+        toolWorker.postMessage({ texture: new Float32Array(buffer), remaining: remaining });
         console.log("splat", remaining);
 
         const texdata = new Uint32Array(buffer);
@@ -622,24 +714,57 @@ async function main() {
     }
   };
 
-  const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/stepin/';
+  const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
+
+  document.getElementById("message").innerText = 'requesting metadata...';
+
   // not using try: since if this request fails, the player should terminate
   let req = await fetch(new URL('meta.json', baseUrl))
   if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-  const metaData = await req.json()
+  gsvMeta = await req.json()
+  gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
+  console.info({ gsvMeta })
+
+  keyframes = [];
+  for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
+    keyframes.push(padZeroStart(index.toString()));
+  }
+  manager.setTotalGroups(keyframes.length);
+
   req = await fetch(new URL('cameras.json', baseUrl))
   if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
   const cameraData = await req.json()
+  // cameras = cameraData;
+  // camera = cameraData[0];
 
-  const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
-  req = await fetch(url, { mode: "cors", credentials: "omit" });
-  if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+  // video and canvas setting
+  const highxyzCanvas = document.getElementById('highxyzCanvas');
+  highxyzCanvas.width = gsvMeta.image[0];
+  highxyzCanvas.height = gsvMeta.image[0]
+  const lowxyzCanvas = document.getElementById('lowxyzCanvas');
+  lowxyzCanvas.width = gsvMeta.image[0];
+  lowxyzCanvas.height = gsvMeta.image[0]
+  const rotCanvas = document.getElementById('rotCanvas');
+  rotCanvas.width = gsvMeta.image[0];
+  rotCanvas.height = gsvMeta.image[0]
 
-  await readChunks(req.body.getReader(), [{ size: 8, type: "magic" }], chunkHandler);
+  await manager.blockUntilAllReady();
+  // current time
+  console.log('current time', new Date().toLocaleTimeString());
+  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
+
+
+  // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
+  // req = await fetch(url, { mode: "cors", credentials: "omit" });
+  // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+
+  // await readChunks(req.body.getReader(), [{ size: 8, type: "magic" }], chunkHandler);
 }
 
 main().catch((err) => {
-  document.getElementById("spinner").style.display = "none";
   document.getElementById("message").innerText = err.toString();
 });
 

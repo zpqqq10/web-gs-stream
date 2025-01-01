@@ -131,7 +131,7 @@ function processPlyBuffer(inputBuffer) {
 
     console.log("Bytes per row", row_offset, types, offsets);
 
-    let dataView = new DataView(inputBuffer, header_end_index + header_end.length);
+    let dataView = new DataView(inputBuffer.buffer, header_end_index + header_end.length);
     let row = 0;
     const attrs = new Proxy(
         {},
@@ -225,7 +225,7 @@ function processPlyBuffer(inputBuffer) {
 
     console.log("Scene Bytes", texdata.buffer.byteLength);
 
-    postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
+    // postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
 }
 
 onmessage = (e) => {
