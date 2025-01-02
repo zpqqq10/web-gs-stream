@@ -154,18 +154,22 @@ async function main() {
 
   plyWorker.onmessage = async (e) => {
     if (e.data.msg && e.data.msg == 'ready') {
-      document.getElementById("message").innerText = 'ply decoder ready';
       manager.initDrcDecoder();
     } else if (e.data.type && e.data.type == FTYPES.ply) {
       const { data, keyframe, type } = e.data;
       // const plyDataBuffer = new Uint8Array(data);
-      manager.appendOneBuffer(data, keyframe, type);
-      // load next group
-      let nextIdx = manager.getNextIndex(type);
-      if (nextIdx < 0) {
-        plyWorker.postMessage({ msg: 'finish' });
+      if (keyframe == -1) {
+        // process the initial ply
+        manager.setInitPly(data);
       } else {
-        plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+        manager.appendOneBuffer(data, keyframe, type);
+        // load next group
+        let nextIdx = manager.getNextIndex(type);
+        if (nextIdx < 0) {
+          plyWorker.postMessage({ msg: 'finish' });
+        } else {
+          plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+        }
       }
     }
   };
@@ -251,14 +255,18 @@ async function main() {
       // do nothing
     } else if (e.data.type && e.data.type == FTYPES.cb) {
       const { data, keyframe, type } = e.data;
-      // const plyDataBuffer = new Uint8Array(data);
-      manager.appendOneBuffer(data, keyframe, type);
-      // load next group
-      let nextIdx = manager.getNextIndex(type);
-      if (nextIdx < 0) {
-        cbdownloader.postMessage({ msg: 'finish' });
+      if (keyframe == -1) {
+        // process the initial codebook
+        manager.setInitCb(data);
       } else {
-        cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+        manager.appendOneBuffer(data, keyframe, type);
+        // load next group
+        let nextIdx = manager.getNextIndex(type);
+        if (nextIdx < 0) {
+          cbdownloader.postMessage({ msg: 'finish' });
+        } else {
+          cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+        }
       }
     }
   };
@@ -739,23 +747,20 @@ async function main() {
   document.getElementById("message").innerText = 'requesting metadata...';
 
   // not using try: since if this request fails, the player should terminate
-  let req = await fetch(new URL('meta.json', baseUrl))
+  const req = await fetch(new URL('meta.json', baseUrl))
   if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
   gsvMeta = await req.json()
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
 
+  // TODO atlas promise
+  const cameraPromise = fetch(new URL('cameras.json', baseUrl))
   keyframes = [];
   for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
     keyframes.push(padZeroStart(index.toString()));
   }
   manager.setTotalGroups(keyframes.length);
 
-  req = await fetch(new URL('cameras.json', baseUrl))
-  if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-  const cameraData = await req.json()
-  // cameras = cameraData;
-  // camera = cameraData[0];
 
   // video and canvas setting
   const highxyzCanvas = document.getElementById('highxyzCanvas');
@@ -768,7 +773,18 @@ async function main() {
   rotCanvas.width = gsvMeta.image[0];
   rotCanvas.height = gsvMeta.image[0]
 
+  const cameraReq = await cameraPromise;
+  if (cameraReq.status != 200) throw new Error(cameraReq.status + " Unable to load " + cameraReq.url);
+  const cameraData = await cameraReq.json()
+  // cameras = cameraData;
+  // camera = cameraData[0];
+
   await manager.blockUntilAllReady();
+  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: -1 });
+  cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });
+  await sleep(300);
+
+
   // current time
   console.log('current time', new Date().toLocaleTimeString());
   plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
@@ -776,6 +792,8 @@ async function main() {
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+
+  await manager.blockUntilCanplay();
 
 
   // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";

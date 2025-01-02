@@ -26,20 +26,33 @@ class PlyWorker {
         if (!this.initialized) {
             throw new Error('ply workder not initialized');
         }
+        if (keyframe == -1) {
+            // process the init ply
+            const drcReq = await fetch(new URL('init.drc', baseUrl))
+            if (drcReq.status != 200) throw new Error(drcReq.status + " Unable to load " + drcReq.url);
+            let drc = await drcReq.arrayBuffer();
+            drc = new Uint8Array(drc);
+            this.drcDecoder.HEAPU8.set(drc, this.inputPtr);
+            // size of the resulting ply
+            const plySize = this.drc2plyFc(this.inputPtr, drc.length, this.outputPtr);
+            const outputArrayBuffer = this.drcDecoder.HEAPU8.slice(this.outputPtr, this.outputPtr + plySize);
+            postMessage({ data: outputArrayBuffer, keyframe: keyframe, type: FTYPES.ply }, [outputArrayBuffer.buffer]);
+        } else {
 
-        // continue downloading
-        console.time('download drc&gz of ' + keyframe)
-        let drcReq = await fetch(new URL(keyframe + '/update_pc.drc', baseUrl))
-        if (drcReq.status != 200) throw new Error(drcReq.status + " Unable to load " + drcReq.url);
-        let drc = await drcReq.arrayBuffer();
-        drc = new Uint8Array(drc);
-        this.drcDecoder.HEAPU8.set(drc, this.inputPtr);
-        // size of the resulting ply
-        const plySize = this.drc2plyFc(this.inputPtr, drc.length, this.outputPtr);
-        const outputArrayBuffer = this.drcDecoder.HEAPU8.slice(this.outputPtr, this.outputPtr + plySize);
-        postMessage({ data: outputArrayBuffer, keyframe: keyframe, type: FTYPES.ply }, [outputArrayBuffer.buffer]);
+            // continue downloading
+            console.time('download drc&gz of ' + keyframe)
+            const drcReq = await fetch(new URL(keyframe + '/update_pc.drc', baseUrl))
+            if (drcReq.status != 200) throw new Error(drcReq.status + " Unable to load " + drcReq.url);
+            let drc = await drcReq.arrayBuffer();
+            drc = new Uint8Array(drc);
+            this.drcDecoder.HEAPU8.set(drc, this.inputPtr);
+            // size of the resulting ply
+            const plySize = this.drc2plyFc(this.inputPtr, drc.length, this.outputPtr);
+            const outputArrayBuffer = this.drcDecoder.HEAPU8.slice(this.outputPtr, this.outputPtr + plySize);
+            postMessage({ data: outputArrayBuffer, keyframe: keyframe, type: FTYPES.ply }, [outputArrayBuffer.buffer]);
 
-        console.timeEnd('download drc&gz of ' + keyframe);
+            console.timeEnd('download drc&gz of ' + keyframe);
+        }
     }
 
     // called after all tasks are done

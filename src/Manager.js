@@ -3,6 +3,7 @@ import { sleep, FTYPES } from "./utils/utils.js"
 export class Manager {
     constructor() {
         this.drcDecoderInit = false;
+        this.jsonDecoder = new TextDecoder();
         this.totalGroups = 0;
         this.plyBuffer = {};
         this.highxyzBuffer = {};
@@ -16,14 +17,22 @@ export class Manager {
         this.lowxyzLoaded = 0;
         this.rotLoaded = 0;
         this.cbLoaded = 0;
+        // whether can play
+        this.initPly = null;
+        this.initCb = null;
+        this.canPlay = false;
+        // current frame
+        this.currentFrame = 0;
+
     }
 
     updatePrompt() {
+        document.getElementById("message").innerText = 'loading wasm';
         var oldone = document.getElementById("message").innerText;
-        if (oldone.startsWith('init') && oldone.length == 10) {
+        if (oldone.startsWith('loading wasm') && oldone.length == 10) {
             oldone = oldone + ".";
         } else {
-            oldone = 'init';
+            oldone = 'loading wasm';
         }
         document.getElementById("message").innerText = oldone;
     }
@@ -34,6 +43,23 @@ export class Manager {
             this.updatePrompt();
         }
         document.getElementById("message").innerText = 'DRC decoder ready';
+    }
+
+    async blockUntilCanplay() {
+        if (this.initPly == null && this.initCb == null) {
+            document.getElementById("message").innerText = 'loading initial data';
+        } else {
+            document.getElementById("message").innerText = 'loading data';
+        }
+        while (!this.canPlay) {
+            await sleep(300);
+            const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
+            // TODO 检查提前量
+            if (this.initPly != null && this.initCb != null && minloaded >= this.currentFrame + 1) {
+                this.canPlay = true;
+            }
+        }
+        document.getElementById("message").innerText = '';
     }
 
     appendOneBuffer(buffer, key, type) {
@@ -62,8 +88,9 @@ export class Manager {
                 this.rotBuffer[key].push(buffer);
             }
         } else if (type === FTYPES.cb) {
+            const jsonData = JSON.parse(this.jsonDecoder.decode(buffer));
             if (this.cbBuffer[key] == undefined) {
-                this.cbBuffer[key] = buffer;
+                this.cbBuffer[key] = jsonData;
                 this.cbLoaded += 1;
             }
         }
@@ -77,6 +104,16 @@ export class Manager {
         } else if (type === FTYPES.rot) {
             this.rotLoaded += 1;
         }
+    }
+
+    // set init ply
+    setInitPly(data) {
+        this.initPly = data;
+    }
+
+    // set init codebook
+    setInitCb(data) {
+        this.initCb = JSON.parse(this.jsonDecoder.decode(data));
     }
 
     initDrcDecoder() {

@@ -12,11 +12,21 @@ class CBDownloader {
         if (!this.initialized) {
             throw new Error('video downloader not initialized');
         }
-        const req = await fetch(new URL(keyframe + '/codebooks.json', baseUrl));
-        if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-        const codebooks = await req.json();
-        // TODO 这里要查一下 很可能会有性能问题
-        postMessage({ data: codebooks, keyframe: keyframe, type: FTYPES.cb });
+        if (keyframe == -1){
+            // process the init codebook
+            const req = await fetch(new URL('init_codebooks.json', baseUrl));
+            if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+            // pass arraybuffer rather than json, to avoid copying                                                      
+            const codebooks = await req.arrayBuffer();
+            postMessage({ data: codebooks, keyframe: keyframe, type: FTYPES.cb }, [codebooks]);
+        } else {
+            const req = await fetch(new URL(keyframe + '/codebooks.json', baseUrl));
+            if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+            // pass arraybuffer rather than json, to avoid copying                                                      
+            const codebooks = await req.arrayBuffer();
+            // TODO 这里要查一下 很可能会有性能问题
+            postMessage({ data: codebooks, keyframe: keyframe, type: FTYPES.cb }, [codebooks]);
+        }
     }
 
     finish() {
