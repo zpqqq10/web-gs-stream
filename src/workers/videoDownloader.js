@@ -34,28 +34,6 @@ class VideoDownloader {
         postMessage({ data: dataBuffer, keyframe: keyframe, type: type }, [dataBuffer]);
         // console.timeEnd('download video of ' + keyframe)
 
-        // // download for one frame
-        // const lowxyzPromise = fetch(new URL(keyframe + '/', baseUrl))
-        // const highxyzPromise = fetch(new URL(keyframe + '/highxyz.mp4', baseUrl))
-        // const rotationPromise = fetch(new URL(keyframe + '/quat.mp4', baseUrl))
-
-        // // usually quat.mp4 is the smallest
-        // let req = await rotationPromise;
-        // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-        // const rotationBuffer = await req.arrayBuffer();
-        // postMessage({ data: rotationBuffer, keyframe: keyframe, type: FTYPES.rot }, [rotationBuffer]);
-
-        // // then highxyz is smaller
-        // req = await highxyzPromise;
-        // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-        // const highxyzBuffer = await req.arrayBuffer();
-        // postMessage({ data: highxyzBuffer, keyframe: keyframe, type: FTYPES.highxyz }, [highxyzBuffer]);
-
-        // req = await lowxyzPromise;
-        // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-        // const lowxyzBuffer = await req.arrayBuffer();
-        // postMessage({ data: lowxyzBuffer, keyframe: keyframe, type: FTYPES.lowxyz }, [lowxyzBuffer])
-
     }
 
     finish() {

@@ -113,7 +113,6 @@ async function main() {
   toolWorker.onmessage = (e) => {
     if (e.data.texdata) {
       const { texdata, texwidth, texheight } = e.data;
-
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(
         gl.TEXTURE_2D,
@@ -651,7 +650,7 @@ async function main() {
     } catch (err) { }
   });
 
-  
+
   document.addEventListener("dragenter", preventDefault);
   document.addEventListener("dragover", preventDefault);
   document.addEventListener("dragleave", preventDefault);
@@ -737,13 +736,13 @@ async function main() {
 
   // current time
   console.log('current time', new Date().toLocaleTimeString());
-  // plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
-  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
+  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
   // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
   // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
-  // cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+  cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
-  // await manager.blockUntilCanplay();
+  await manager.blockUntilCanplay();
 
   // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
   // const url = "model.splatv";

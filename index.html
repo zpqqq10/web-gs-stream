@@ -73,6 +73,16 @@
       right: 10px;
     }
 
+    #progress {
+      position: absolute;
+      top: 10px;
+      z-index: 999;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
     #caminfo {
       position: absolute;
       top: 10px;
@@ -167,6 +177,14 @@
   </div>
   <div id="caminfo">
     <span id="camid"></span>
+  </div>
+
+  <div id="progress">
+    <span id="cbProgress"></span>
+    <span id="highProgress"></span>
+    <span id="lowProgress"></span>
+    <span id="rotProgress"></span>
+    <span id="plyProgress"></span>
   </div>
 
   <!-- <script type="module" src="staticgs.js"></script> -->

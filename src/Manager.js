@@ -26,6 +26,7 @@ export class Manager {
 
     }
 
+    // update the prompt in the middle
     updatePrompt() {
         document.getElementById("message").innerText = 'loading wasm';
         var oldone = document.getElementById("message").innerText;
@@ -66,6 +67,7 @@ export class Manager {
         if (type === FTYPES.ply) {
             this.plyBuffer[key] = buffer;
             this.plyLoaded += 1;
+            this.updateProgressHint(FTYPES.ply);
         } else if (type === FTYPES.highxyz) {
             if (this.highxyzBuffer[key] == undefined) {
                 this.highxyzBuffer[key] = [];
@@ -89,10 +91,9 @@ export class Manager {
             }
         } else if (type === FTYPES.cb) {
             const jsonData = JSON.parse(this.jsonDecoder.decode(buffer));
-            if (this.cbBuffer[key] == undefined) {
-                this.cbBuffer[key] = jsonData;
-                this.cbLoaded += 1;
-            }
+            this.cbBuffer[key] = jsonData;
+            this.cbLoaded += 1;
+            this.updateProgressHint(FTYPES.cb);
         }
     }
 
@@ -104,6 +105,7 @@ export class Manager {
         } else if (type === FTYPES.rot) {
             this.rotLoaded += 1;
         }
+        this.updateProgressHint(type);
     }
 
     // set init ply
@@ -122,6 +124,26 @@ export class Manager {
 
     setTotalGroups(totalGroups) {
         this.totalGroups = totalGroups;
+        this.updateProgressHint(FTYPES.ply);
+        this.updateProgressHint(FTYPES.highxyz);
+        this.updateProgressHint(FTYPES.lowxyz);
+        this.updateProgressHint(FTYPES.rot);
+        this.updateProgressHint(FTYPES.cb);
+    }
+
+    // update the progress hint in the top-left corner
+    updateProgressHint(type) {
+        if (type === FTYPES.ply) {
+            document.getElementById("plyProgress").innerText = 'ply: ' + this.plyLoaded + '/' + this.totalGroups;
+        } else if (type === FTYPES.highxyz) {
+            document.getElementById("highProgress").innerText = 'high: ' + this.highxyzLoaded + '/' + this.totalGroups;
+        } else if (type === FTYPES.lowxyz) {
+            document.getElementById("lowProgress").innerText = 'low: ' + this.lowxyzLoaded + '/' + this.totalGroups;
+        } else if (type === FTYPES.rot) {
+            document.getElementById("rotProgress").innerText = 'rot: ' + this.rotLoaded + '/' + this.totalGroups;
+        } else if (type === FTYPES.cb) {
+            document.getElementById("cbProgress").innerText = 'codebooks: ' + this.cbLoaded + '/' + this.totalGroups;
+        }
     }
 
     getNextIndex(type) {

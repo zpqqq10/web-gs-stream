@@ -1376,11 +1376,11 @@ async function main() {
             start = Date.now() + 2000;
         }
         const progress = (100 * vertexCount) / (splatData.length / rowLength);
-        if (progress < 100) {
-            document.getElementById("progress").style.width = progress + "%";
-        } else {
-            document.getElementById("progress").style.display = "none";
-        }
+        // if (progress < 100) {
+        //     document.getElementById("progress").style.width = progress + "%";
+        // } else {
+        //     document.getElementById("progress").style.display = "none";
+        // }
         fps.innerText = Math.round(avgFps) + " fps";
         if (isNaN(currentCameraIndex)) {
             camid.innerText = "";
