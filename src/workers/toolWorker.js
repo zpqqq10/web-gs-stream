@@ -1,3 +1,5 @@
+import { packHalf2x16 } from "../utils/mathUtils.js";
+
 let vertexCount = 0;
 let viewProj;
 let lastProj = [];
@@ -5,40 +7,8 @@ let depthIndex = new Uint32Array();
 let lastVertexCount = 0;
 let positions;
 
-var _floatView = new Float32Array(1);
-var _int32View = new Int32Array(_floatView.buffer);
-
-// 将浮点数转换为半精度浮点数
-function floatToHalf(float) {
-    _floatView[0] = float;
-    var f = _int32View[0];
-    var sign = (f >> 31) & 0x0001;
-    var exp = (f >> 23) & 0x00ff;
-    var frac = f & 0x007fffff;
-    var newExp;
-    if (exp == 0) {
-        newExp = 0;
-    } else if (exp < 113) {
-        newExp = 0;
-        frac |= 0x00800000;
-        frac = frac >> (113 - exp);
-        if (frac & 0x01000000) {
-            newExp = 1;
-            frac = 0;
-        }
-    } else if (exp < 142) {
-        newExp = exp - 112;
-    } else {
-        newExp = 31;
-        frac = 0;
-    }
-    return (sign << 15) | (newExp << 10) | (frac >> 13);
-}
-
-// 将两个半精度浮点数打包为一个32位整数
-function packHalf2x16(x, y) {
-    return (floatToHalf(x) | (floatToHalf(y) << 16)) >>> 0;
-}
+const PISQRT = 1.77245385
+const EXTENT = 5.7177
 
 // 运行排序算法
 function runSort(viewProj) {
@@ -63,15 +33,16 @@ function runSort(viewProj) {
         if (depth < minDepth) minDepth = depth;
     }
 
-    // This is a 16 bit single-pass counting sort
-    let depthInv = (256 * 256) / (maxDepth - minDepth);
-    let counts0 = new Uint32Array(256 * 256);
+    // This is a x-bit single-pass counting sort
+    // bins here can influence sorting efficiency
+    let depthInv = (128 * 128 - 1) / (maxDepth - minDepth);
+    let counts0 = new Uint32Array(128 * 128);
     for (let i = 0; i < vertexCount; i++) {
         sizeList[i] = ((sizeList[i] - minDepth) * depthInv) | 0;
         counts0[sizeList[i]]++;
     }
-    let starts0 = new Uint32Array(256 * 256);
-    for (let i = 1; i < 256 * 256; i++) starts0[i] = starts0[i - 1] + counts0[i - 1];
+    let starts0 = new Uint32Array(128 * 128);
+    for (let i = 1; i < 128 * 128; i++) starts0[i] = starts0[i - 1] + counts0[i - 1];
     depthIndex = new Uint32Array(vertexCount);
     for (let i = 0; i < vertexCount; i++) depthIndex[starts0[sizeList[i]]++] = i;
 
@@ -100,10 +71,12 @@ let sortRunning;
 // 处理PLY文件缓冲区
 function processPlyBuffer(inputBuffer) {
     const ubuf = new Uint8Array(inputBuffer);
+    // 10KB ought to be enough for a header...
     const header = new TextDecoder().decode(ubuf.slice(0, 1024 * 10));
     const header_end = "end_header\n";
     const header_end_index = header.indexOf(header_end);
-    if (header_end_index < 0) throw new Error("Unable to read .ply file header");
+    if (header_end_index < 0)
+        throw new Error("Unable to read .ply file header");
     const vertexCount = parseInt(/element vertex (\d+)\n/.exec(header)[1]);
     console.log("Vertex Count", vertexCount);
     let row_offset = 0,
@@ -128,104 +101,122 @@ function processPlyBuffer(inputBuffer) {
         offsets[name] = row_offset;
         row_offset += parseInt(arrayType.replace(/[^\d]/g, "")) / 8;
     }
+    // console.log("Bytes per row", row_offset, types, offsets);
 
-    console.log("Bytes per row", row_offset, types, offsets);
-
-    let dataView = new DataView(inputBuffer.buffer, header_end_index + header_end.length);
+    let dataView = new DataView(
+        inputBuffer,
+        header_end_index + header_end.length,
+    );
     let row = 0;
     const attrs = new Proxy(
         {},
         {
             get(target, prop) {
                 if (!types[prop]) throw new Error(prop + " not found");
-                return dataView[types[prop]](row * row_offset + offsets[prop], true);
+                return dataView[types[prop]](
+                    row * row_offset + offsets[prop],
+                    true,
+                );
             },
-        }
+        },
     );
 
-    console.time("calculate importance");
-    let sizeList = new Float32Array(vertexCount);
-    let sizeIndex = new Uint32Array(vertexCount);
-    for (row = 0; row < vertexCount; row++) {
-        sizeIndex[row] = row;
-        if (!types["scale_0"]) continue;
-        const size = Math.exp(attrs.scale_0) * Math.exp(attrs.scale_1) * Math.exp(attrs.scale_2);
-        const opacity = 1 / (1 + Math.exp(-attrs.opacity));
-        sizeList[row] = size * opacity;
-    }
-    console.timeEnd("calculate importance");
-
-    for (let type in types) {
-        let min = Infinity,
-            max = -Infinity;
-        for (row = 0; row < vertexCount; row++) {
-            sizeIndex[row] = row;
-            min = Math.min(min, attrs[type]);
-            max = Math.max(max, attrs[type]);
-        }
-        console.log(type, min, max);
-    }
-
-    console.time("sort");
-    sizeIndex.sort((b, a) => sizeList[a] - sizeList[b]);
-    console.timeEnd("sort");
-
-    const position_buffer = new Float32Array(3 * vertexCount);
-
-    var texwidth = 1024 * 4; // Set to your desired width
-    var texheight = Math.ceil((4 * vertexCount) / texwidth); // Set to your desired height
+    var texwidth = 1024 * 2; // Set to your desired width
+    var texheight = Math.ceil((2 * vertexCount) / texwidth); // Set to your desired height
+    // compress all into 7 32-bit numbers
     var texdata = new Uint32Array(texwidth * texheight * 4); // 4 components per pixel (RGBA)
-    var texdata_c = new Uint8Array(texdata.buffer);
+    var texdata_c = new Uint8ClampedArray(texdata.buffer);
     var texdata_f = new Float32Array(texdata.buffer);
-
-    console.time("build buffer");
+    positions = new Float32Array(vertexCount * 3);
+    console.time("build texture");
     for (let j = 0; j < vertexCount; j++) {
-        row = sizeIndex[j];
+        row = j;
 
-        // x, y, z
-        position_buffer[3 * j + 0] = attrs.x;
-        position_buffer[3 * j + 1] = attrs.y;
-        position_buffer[3 * j + 2] = attrs.z;
+        // first 3 32-bit are used for XYZ
+        texdata_f[8 * j + 0] = attrs.x;
+        texdata_f[8 * j + 1] = attrs.y;
+        texdata_f[8 * j + 2] = attrs.z;
+        positions[3 * j + 0] = attrs.x;
+        positions[3 * j + 1] = attrs.y;
+        positions[3 * j + 2] = attrs.z;
 
-        texdata_f[16 * j + 0] = attrs.x;
-        texdata_f[16 * j + 1] = attrs.y;
-        texdata_f[16 * j + 2] = attrs.z;
+        let scale = [
+            (attrs.scale_0 / 4095) * EXTENT,
+            (attrs.scale_1 / 4095) * EXTENT,
+            (attrs.scale_2 / 4905) * EXTENT];
+        let rot = [
+            (attrs.rot_0) / 255 * 2 - 1,
+            (attrs.rot_1) / 255 * 2 - 1,
+            (attrs.rot_2) / 255 * 2 - 1,
+            (attrs.rot_3) / 255 * 2 - 1,
+        ];
 
-        // quaternions
-        texdata[16 * j + 3] = packHalf2x16(attrs.rot_0, attrs.rot_1);
-        texdata[16 * j + 4] = packHalf2x16(attrs.rot_2, attrs.rot_3);
+        // for vanilla 3dgs
+        // const qlen = Math.sqrt(
+        //     attrs.rot_0 ** 2 +
+        //     attrs.rot_1 ** 2 +
+        //     attrs.rot_2 ** 2 +
+        //     attrs.rot_3 ** 2,
+        // );
+        // let scale = [
+        //     Math.exp(attrs.scale_0),
+        //     Math.exp(attrs.scale_1),
+        //     Math.exp(attrs.scale_2)];
+        // let rot = [
+        //     attrs.rot_0 / qlen,
+        //     attrs.rot_1 / qlen,
+        //     attrs.rot_2 / qlen,
+        //     attrs.rot_3 / qlen,
+        // ];
 
-        // scale
-        texdata[16 * j + 5] = packHalf2x16(Math.exp(attrs.scale_0), Math.exp(attrs.scale_1));
-        texdata[16 * j + 6] = packHalf2x16(Math.exp(attrs.scale_2), 0);
+        // Compute the matrix product of S and R (M = S * R)
+        const M = [
+            1.0 - 2.0 * (rot[2] * rot[2] + rot[3] * rot[3]),
+            2.0 * (rot[1] * rot[2] + rot[0] * rot[3]),
+            2.0 * (rot[1] * rot[3] - rot[0] * rot[2]),
 
-        // rgb
-        texdata_c[4 * (16 * j + 7) + 0] = Math.max(0, Math.min(255, attrs.f_dc_0 * 255));
-        texdata_c[4 * (16 * j + 7) + 1] = Math.max(0, Math.min(255, attrs.f_dc_1 * 255));
-        texdata_c[4 * (16 * j + 7) + 2] = Math.max(0, Math.min(255, attrs.f_dc_2 * 255));
+            2.0 * (rot[1] * rot[2] - rot[0] * rot[3]),
+            1.0 - 2.0 * (rot[1] * rot[1] + rot[3] * rot[3]),
+            2.0 * (rot[2] * rot[3] + rot[0] * rot[1]),
 
-        // opacity
-        texdata_c[4 * (16 * j + 7) + 3] = (1 / (1 + Math.exp(-attrs.opacity))) * 255;
+            2.0 * (rot[1] * rot[3] + rot[0] * rot[2]),
+            2.0 * (rot[2] * rot[3] - rot[0] * rot[1]),
+            1.0 - 2.0 * (rot[1] * rot[1] + rot[2] * rot[2]),
+        ].map((k, i) => k * scale[Math.floor(i / 3)]);
 
-        // movement over time
-        texdata[16 * j + 8 + 0] = packHalf2x16(attrs.motion_0, attrs.motion_1);
-        texdata[16 * j + 8 + 1] = packHalf2x16(attrs.motion_2, attrs.motion_3);
-        texdata[16 * j + 8 + 2] = packHalf2x16(attrs.motion_4, attrs.motion_5);
-        texdata[16 * j + 8 + 3] = packHalf2x16(attrs.motion_6, attrs.motion_7);
-        texdata[16 * j + 8 + 4] = packHalf2x16(attrs.motion_8, 0);
+        // 3D covariance matrix
+        const sigma = [
+            M[0] * M[0] + M[3] * M[3] + M[6] * M[6],
+            M[0] * M[1] + M[3] * M[4] + M[6] * M[7],
+            M[0] * M[2] + M[3] * M[5] + M[6] * M[8],
+            M[1] * M[1] + M[4] * M[4] + M[7] * M[7],
+            M[1] * M[2] + M[4] * M[5] + M[7] * M[8],
+            M[2] * M[2] + M[5] * M[5] + M[8] * M[8],
+        ];
 
-        // rotation over time
-        texdata[16 * j + 8 + 5] = packHalf2x16(attrs.omega_0, attrs.omega_1);
-        texdata[16 * j + 8 + 6] = packHalf2x16(attrs.omega_2, attrs.omega_3);
+        texdata[8 * j + 4] = packHalf2x16(4 * sigma[0], 4 * sigma[1]);
+        texdata[8 * j + 5] = packHalf2x16(4 * sigma[2], 4 * sigma[3]);
+        texdata[8 * j + 6] = packHalf2x16(4 * sigma[4], 4 * sigma[5]);
 
-        // trbf temporal radial basis function parameters
-        texdata[16 * j + 8 + 7] = packHalf2x16(attrs.trbf_center, Math.exp(attrs.trbf_scale));
+        // r, g, b, a/opacity
+        // the last 32-bit are used for RGBA (4 8-bit)
+        texdata_c[4 * (8 * j + 7) + 0] = attrs.f_dc_0;
+        texdata_c[4 * (8 * j + 7) + 1] = attrs.f_dc_1;
+        texdata_c[4 * (8 * j + 7) + 2] = attrs.f_dc_2;
+        // TODO 这里要不要activate啊？
+        texdata_c[4 * (8 * j + 7) + 3] = attrs.opacity;
+
+        // for vanilla 3dgs
+        // const SH_C0 = 0.28209479177387814;
+        // texdata_c[4 * (8 * j + 7) + 0] = (0.5 + SH_C0 * attrs.f_dc_0) * 255;
+        // texdata_c[4 * (8 * j + 7) + 1] = (0.5 + SH_C0 * attrs.f_dc_1) * 255;
+        // texdata_c[4 * (8 * j + 7) + 2] = (0.5 + SH_C0 * attrs.f_dc_2) * 255;
+        // texdata_c[4 * (8 * j + 7) + 3] = (1 / (1 + Math.exp(-attrs.opacity))) * 255;
+
     }
-    console.timeEnd("build buffer");
-
-    console.log("Scene Bytes", texdata.buffer.byteLength);
-
-    // postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
+    console.timeEnd("build texture");
+    postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
+    return vertexCount;
 }
 
 onmessage = (e) => {
@@ -246,6 +237,7 @@ onmessage = (e) => {
         throttledSort();
     } else if (e.data.ply) {
         vertexCount = 0;
-        vertexCount = processPlyBuffer(e.data.ply);
+        // uint8array here
+        vertexCount = processPlyBuffer(e.data.ply.buffer);
     }
 };

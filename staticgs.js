@@ -523,24 +523,24 @@ function createWorker(self) {
             },
         );
 
-        console.time("calculate importance");
-        let sizeList = new Float32Array(vertexCount);
-        let sizeIndex = new Uint32Array(vertexCount);
-        for (row = 0; row < vertexCount; row++) {
-            sizeIndex[row] = row;
-            if (!types["scale_0"]) continue;
-            const size =
-                Math.exp(attrs.scale_0) *
-                Math.exp(attrs.scale_1) *
-                Math.exp(attrs.scale_2);
-            const opacity = 1 / (1 + Math.exp(-attrs.opacity));
-            sizeList[row] = size * opacity;
-        }
-        console.timeEnd("calculate importance");
+        // console.time("calculate importance");
+        // let sizeList = new Float32Array(vertexCount);
+        // let sizeIndex = new Uint32Array(vertexCount);
+        // for (row = 0; row < vertexCount; row++) {
+        //     sizeIndex[row] = row;
+        //     if (!types["scale_0"]) continue;
+        //     const size =
+        //         Math.exp(attrs.scale_0) *
+        //         Math.exp(attrs.scale_1) *
+        //         Math.exp(attrs.scale_2);
+        //     const opacity = 1 / (1 + Math.exp(-attrs.opacity));
+        //     sizeList[row] = size * opacity;
+        // }
+        // console.timeEnd("calculate importance");
 
-        console.time("sort");
-        sizeIndex.sort((b, a) => sizeList[a] - sizeList[b]);
-        console.timeEnd("sort");
+        // console.time("sort");
+        // sizeIndex.sort((b, a) => sizeList[a] - sizeList[b]);
+        // console.timeEnd("sort");
 
         // 6*4 + 4 + 4 = 8*4
         // XYZ - Position (Float32)
@@ -550,9 +550,17 @@ function createWorker(self) {
         const rowLength = 3 * 4 + 3 * 4 + 4 + 4;
         const buffer = new ArrayBuffer(rowLength * vertexCount);
 
+
+        // var texwidth = 1024 * 2; // Set to your desired width
+        // var texheight = Math.ceil((2 * vertexCount) / texwidth); // Set to your desired height
+        // // compress all into 7 32-bit numbers
+        // var texdata = new Uint32Array(texwidth * texheight * 4); // 4 components per pixel (RGBA)
+        // var texdata_c = new Uint8Array(texdata.buffer);
+        // var texdata_f = new Float32Array(texdata.buffer);
         console.time("build buffer");
         for (let j = 0; j < vertexCount; j++) {
-            row = sizeIndex[j];
+            // row = sizeIndex[j];
+            row = j;
 
             const position = new Float32Array(buffer, j * rowLength, 3);
             const scales = new Float32Array(buffer, j * rowLength + 4 * 3, 3);
@@ -570,9 +578,9 @@ function createWorker(self) {
             if (types["scale_0"]) {
                 const qlen = Math.sqrt(
                     attrs.rot_0 ** 2 +
-                        attrs.rot_1 ** 2 +
-                        attrs.rot_2 ** 2 +
-                        attrs.rot_3 ** 2,
+                    attrs.rot_1 ** 2 +
+                    attrs.rot_2 ** 2 +
+                    attrs.rot_3 ** 2,
                 );
 
                 rot[0] = (attrs.rot_0 / qlen) * 128 + 128;
@@ -735,19 +743,21 @@ let defaultViewMatrix = [
     0.47, 0.04, 0.88, 0, -0.11, 0.99, 0.02, 0, -0.88, -0.11, 0.47, 0, 0.07,
     0.03, 6.55, 1,
 ];
+// defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
 let viewMatrix = defaultViewMatrix;
 async function main() {
-    let carousel = true;
+    let carousel = false;
     const params = new URLSearchParams(location.search);
     try {
         viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
         carousel = false;
-    } catch (err) {}
+    } catch (err) { }
     const url = new URL(
         // "nike.splat",
         // location.href,
-        params.get("url") || "train.splat",
-        "https://huggingface.co/cakewalk/splat-data/resolve/main/",
+        // params.get("url") || "train.splat",
+        // "https://huggingface.co/cakewalk/splat-data/resolve/main/",
+        "http://10.76.1.68:8080/fragmented/h264/stepin/100w.ply"
     );
     const req = await fetch(url, {
         mode: "cors", // no-cors, *cors, same-origin
@@ -968,8 +978,8 @@ async function main() {
                 e.deltaMode == 1
                     ? lineHeight
                     : e.deltaMode == 2
-                      ? innerHeight
-                      : 1;
+                        ? innerHeight
+                        : 1;
             let inv = invert4(viewMatrix);
             if (e.shiftKey) {
                 inv = translate4(
@@ -1236,8 +1246,8 @@ async function main() {
                     inv,
                     0,
                     -moveSpeed *
-                        (gamepad.buttons[12].pressed -
-                            gamepad.buttons[13].pressed),
+                    (gamepad.buttons[12].pressed -
+                        gamepad.buttons[13].pressed),
                     0,
                 );
                 carousel = false;
@@ -1247,8 +1257,8 @@ async function main() {
                 inv = translate4(
                     inv,
                     -moveSpeed *
-                        (gamepad.buttons[14].pressed -
-                            gamepad.buttons[15].pressed),
+                    (gamepad.buttons[14].pressed -
+                        gamepad.buttons[15].pressed),
                     0,
                     0,
                 );
@@ -1279,8 +1289,8 @@ async function main() {
             if (gamepad.buttons[5].pressed && !rightGamepadTrigger) {
                 camera =
                     cameras[
-                        (cameras.indexOf(camera) + cameras.length - 1) %
-                            cameras.length
+                    (cameras.indexOf(camera) + cameras.length - 1) %
+                    cameras.length
                     ];
                 inv = invert4(getViewMatrix(camera));
                 carousel = false;
@@ -1306,8 +1316,8 @@ async function main() {
                 activeKeys.includes("KeyJ")
                     ? -0.05
                     : activeKeys.includes("KeyL")
-                      ? 0.05
-                      : 0,
+                        ? 0.05
+                        : 0,
                 0,
                 1,
                 0,
@@ -1317,8 +1327,8 @@ async function main() {
                 activeKeys.includes("KeyI")
                     ? 0.05
                     : activeKeys.includes("KeyK")
-                      ? -0.05
-                      : 0,
+                        ? -0.05
+                        : 0,
                 1,
                 0,
                 0,
@@ -1356,13 +1366,13 @@ async function main() {
         avgFps = avgFps * 0.9 + currentFps * 0.1;
 
         if (vertexCount > 0) {
-            document.getElementById("spinner").style.display = "none";
+            // document.getElementById("spinner").style.display = "none";
             gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
             gl.clear(gl.COLOR_BUFFER_BIT);
             gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
         } else {
             gl.clear(gl.COLOR_BUFFER_BIT);
-            document.getElementById("spinner").style.display = "";
+            // document.getElementById("spinner").style.display = "";
             start = Date.now() + 2000;
         }
         const progress = (100 * vertexCount) / (splatData.length / rowLength);
@@ -1387,48 +1397,11 @@ async function main() {
         splatData[2] == 121 &&
         splatData[3] == 10;
 
-    const selectFile = (file) => {
-        const fr = new FileReader();
-        if (/\.json$/i.test(file.name)) {
-            fr.onload = () => {
-                cameras = JSON.parse(fr.result);
-                viewMatrix = getViewMatrix(cameras[0]);
-                projectionMatrix = getProjectionMatrix(
-                    camera.fx / downsample,
-                    camera.fy / downsample,
-                    canvas.width,
-                    canvas.height,
-                );
-                gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
-
-                console.log("Loaded Cameras");
-            };
-            fr.readAsText(file);
-        } else {
-            stopLoading = true;
-            fr.onload = () => {
-                splatData = new Uint8Array(fr.result);
-                console.log("Loaded", Math.floor(splatData.length / rowLength));
-
-                if (isPly(splatData)) {
-                    // ply file magic header means it should be handled differently
-                    worker.postMessage({ ply: splatData.buffer, save: true });
-                } else {
-                    worker.postMessage({
-                        buffer: splatData.buffer,
-                        vertexCount: Math.floor(splatData.length / rowLength),
-                    });
-                }
-            };
-            fr.readAsArrayBuffer(file);
-        }
-    };
-
     window.addEventListener("hashchange", (e) => {
         try {
             viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
             carousel = false;
-        } catch (err) {}
+        } catch (err) { }
     });
 
     const preventDefault = (e) => {
@@ -1438,11 +1411,6 @@ async function main() {
     document.addEventListener("dragenter", preventDefault);
     document.addEventListener("dragover", preventDefault);
     document.addEventListener("dragleave", preventDefault);
-    document.addEventListener("drop", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        selectFile(e.dataTransfer.files[0]);
-    });
 
     let bytesRead = 0;
     let lastVertexCount = -1;
@@ -1479,6 +1447,6 @@ async function main() {
 }
 
 main().catch((err) => {
-    document.getElementById("spinner").style.display = "none";
+    // document.getElementById("spinner").style.display = "none";
     document.getElementById("message").innerText = err.toString();
 });

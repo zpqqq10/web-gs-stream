@@ -1,6 +1,6 @@
-import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSTVSahders.js";
+import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSVSahders.js";
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4 } from "./src/utils/mathUtils.js";
-import { attachShaders, readChunks, padZeroStart, FTYPES, sleep } from "./src/utils/utils.js";
+import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep } from "./src/utils/utils.js";
 import { Manager } from "./src/Manager.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
@@ -27,7 +27,6 @@ let cameras = [
 
 let camera = cameras[0];
 let defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
-
 let viewMatrix = defaultViewMatrix;
 let gsvMeta = {};
 let keyframes = [];
@@ -41,11 +40,7 @@ async function main() {
     carousel = false;
   } catch (err) { }
 
-  const rowLength = 3 * 4 + 3 * 4 + 4 + 4;
-  let splatData = new Uint8Array([]);
-  const downsample = splatData.length / rowLength > 500000 ? 1 : 1 / devicePixelRatio;
-
-  const toolWorker = new Worker(ToolWorkerUrl);
+  const toolWorker = new Worker(ToolWorkerUrl, { type: 'module' });
   const plyWorker = new Worker(PlyWorkerUrl, { type: 'module' });
   const downloader = new Worker(VideoDownloaderUrl, { type: 'module' });
   const cbdownloader = new Worker(CBDownloaderUrl, { type: 'module' });
@@ -105,8 +100,8 @@ async function main() {
 
     gl.uniform2fv(u_viewport, new Float32Array([innerWidth, innerHeight]));
 
-    gl.canvas.width = Math.round(innerWidth / downsample);
-    gl.canvas.height = Math.round(innerHeight / downsample);
+    gl.canvas.width = Math.round(innerWidth);
+    gl.canvas.height = Math.round(innerHeight);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
@@ -119,31 +114,34 @@ async function main() {
     if (e.data.texdata) {
       const { texdata, texwidth, texheight } = e.data;
 
-      const json = new TextEncoder().encode(
-        JSON.stringify([
-          {
-            type: "splat",
-            size: texdata.byteLength,
-            texwidth: texwidth,
-            texheight: texheight,
-            cameras: cameras,
-          },
-        ])
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_S,
+        gl.CLAMP_TO_EDGE,
       );
-      const magic = new Uint32Array(2);
-      magic[0] = 0x674b;
-      magic[1] = json.length;
-      const blob = new Blob([magic.buffer, json.buffer, texdata.buffer], {
-        type: "application/octet-stream",
-      });
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_T,
+        gl.CLAMP_TO_EDGE,
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-      readChunks(new Response(blob).body.getReader(), [{ size: 8, type: "magic" }], chunkHandler);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA32UI,
+        texwidth,
+        texheight,
+        0,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_INT,
+        texdata,
+      );
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
 
-      const link = document.createElement("a");
-      link.download = "model.splatv";
-      link.href = URL.createObjectURL(blob);
-      document.body.appendChild(link);
-      link.click();
     } else if (e.data.depthIndex) {
       const { depthIndex, viewProj } = e.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
@@ -161,6 +159,7 @@ async function main() {
       if (keyframe == -1) {
         // process the initial ply
         manager.setInitPly(data);
+        toolWorker.postMessage({ ply: data });
       } else {
         manager.appendOneBuffer(data, keyframe, type);
         // load next group
@@ -297,6 +296,7 @@ async function main() {
       carousel = true;
     }
   });
+
   window.addEventListener("keyup", (e) => {
     activeKeys = activeKeys.filter((k) => k !== e.code);
   });
@@ -637,54 +637,12 @@ async function main() {
       // document.getElementById("spinner").style.display = "";
       start = Date.now() + 2000;
     }
-    const progress = (100 * vertexCount) / (splatData.length / rowLength);
-    if (progress < 100) {
-      document.getElementById("progress").style.width = progress + "%";
-    } else {
-      document.getElementById("progress").style.display = "none";
-    }
     fps.innerText = Math.round(avgFps) + " fps";
     lastFrame = now;
     requestAnimationFrame(frame);
   };
 
   frame();
-
-  const selectFile = (file) => {
-    const fr = new FileReader();
-    if (/\.json$/i.test(file.name)) {
-      fr.onload = () => {
-        cameras = JSON.parse(fr.result);
-        viewMatrix = getViewMatrix(cameras[0]);
-        projectionMatrix = getProjectionMatrix(camera.fx / downsample, camera.fy / downsample, canvas.width, canvas.height);
-        gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
-
-        console.log("Loaded Cameras");
-      };
-      fr.readAsText(file);
-    } else {
-      stopLoading = true;
-      fr.onload = () => {
-        splatData = new Uint8Array(fr.result);
-        console.log("Loaded", Math.floor(splatData.length / rowLength));
-
-        if (splatData[0] == 112 && splatData[1] == 108 && splatData[2] == 121 && splatData[3] == 10) {
-          // ply file magic header means it should be handled differently
-          toolWorker.postMessage({ ply: splatData.buffer });
-        } else if (splatData[0] == 75 && splatData[1] == 103) {
-          // splatv file
-          readChunks(new Response(splatData).body.getReader(), [{ size: 8, type: "magic" }], chunkHandler).then(() => {
-            currentCameraIndex = 0;
-            camera = cameras[currentCameraIndex];
-            viewMatrix = getViewMatrix(camera);
-          });
-        } else {
-          alert("Unsupported file format!");
-        }
-      };
-      fr.readAsArrayBuffer(file);
-    }
-  };
 
   window.addEventListener("hashchange", (e) => {
     try {
@@ -693,18 +651,10 @@ async function main() {
     } catch (err) { }
   });
 
-  const preventDefault = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  
   document.addEventListener("dragenter", preventDefault);
   document.addEventListener("dragover", preventDefault);
   document.addEventListener("dragleave", preventDefault);
-  document.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    selectFile(e.dataTransfer.files[0]);
-  });
 
   let lastVertexCount = -1;
   const chunkHandler = (chunk, buffer, remaining, chunks) => {
@@ -747,9 +697,9 @@ async function main() {
   document.getElementById("message").innerText = 'requesting metadata...';
 
   // not using try: since if this request fails, the player should terminate
-  const req = await fetch(new URL('meta.json', baseUrl))
-  if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-  gsvMeta = await req.json()
+  const metaReq = await fetch(new URL('meta.json', baseUrl))
+  if (metaReq.status != 200) throw new Error(metaReq.status + " Unable to load " + metaReq.url);
+  gsvMeta = await metaReq.json()
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
 
@@ -776,28 +726,28 @@ async function main() {
   const cameraReq = await cameraPromise;
   if (cameraReq.status != 200) throw new Error(cameraReq.status + " Unable to load " + cameraReq.url);
   const cameraData = await cameraReq.json()
-  // cameras = cameraData;
-  // camera = cameraData[0];
+  cameras = cameraData;
+  camera = cameraData[0];
 
   await manager.blockUntilAllReady();
-  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: -1 });
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });
+  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: -1 });
   await sleep(300);
 
 
   // current time
   console.log('current time', new Date().toLocaleTimeString());
-  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
-  cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+  // plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
+  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
+  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
+  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
+  // cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
-  await manager.blockUntilCanplay();
-
+  // await manager.blockUntilCanplay();
 
   // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
-  // req = await fetch(url, { mode: "cors", credentials: "omit" });
+  // const url = "model.splatv";
+  // let req = await fetch(url, { mode: "cors", credentials: "omit" });
   // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
 
   // await readChunks(req.body.getReader(), [{ size: 8, type: "magic" }], chunkHandler);

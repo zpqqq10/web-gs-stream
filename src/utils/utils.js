@@ -6,6 +6,10 @@ export const FTYPES = {
     cb: 5
 };
 
+export const preventDefault = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
 export function attachShaders(gl, vertexShaderSource, fragmentShaderSource) {
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
