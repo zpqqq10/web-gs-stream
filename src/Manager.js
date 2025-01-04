@@ -5,7 +5,6 @@ export class Manager {
         this.drcDecoderInit = false;
         this.jsonDecoder = new TextDecoder();
         this.totalGroups = 0;
-        this.plyBuffer = {};
         this.highxyzBuffer = {};
         this.lowxyzBuffer = {};
         this.rotBuffer = {};
@@ -18,7 +17,6 @@ export class Manager {
         this.rotLoaded = 0;
         this.cbLoaded = 0;
         // whether can play
-        this.initPly = null;
         this.initCb = null;
         this.canPlay = false;
         // current frame
@@ -56,7 +54,7 @@ export class Manager {
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             // TODO 检查提前量
-            if (this.initPly != null && this.initCb != null && minloaded >= this.currentFrame + 1) {
+            if (this.initCb != null && minloaded >= this.currentFrame + 1) {
                 this.canPlay = true;
             }
         }
@@ -65,7 +63,7 @@ export class Manager {
 
     appendOneBuffer(buffer, key, type) {
         if (type === FTYPES.ply) {
-            this.plyBuffer[key] = buffer;
+            // this.plyBuffer[key] = buffer;
             this.plyLoaded += 1;
             this.updateProgressHint(FTYPES.ply);
         } else if (type === FTYPES.highxyz) {
@@ -106,11 +104,6 @@ export class Manager {
             this.rotLoaded += 1;
         }
         this.updateProgressHint(type);
-    }
-
-    // set init ply
-    setInitPly(data) {
-        this.initPly = data;
     }
 
     // set init codebook
@@ -174,7 +167,6 @@ export class Manager {
     reload() {
         this.drcDecoderInit = false;
         this.videoDecoderInit = false;
-        this.plyBuffer = {};
         this.highxyzBuffer = {};
         this.lowxyzBuffer = {};
         this.rotBuffer = {};

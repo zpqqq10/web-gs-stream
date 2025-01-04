@@ -31,6 +31,7 @@ let viewMatrix = defaultViewMatrix;
 let gsvMeta = {};
 let keyframes = [];
 let manager = new Manager();
+let plyTexData = new Uint32Array();
 
 async function main() {
   let carousel = false;
@@ -113,6 +114,8 @@ async function main() {
   toolWorker.onmessage = (e) => {
     if (e.data.texdata) {
       const { texdata, texwidth, texheight } = e.data;
+      // save the previous ply here
+      plyTexData = texdata;
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(
         gl.TEXTURE_2D,
@@ -157,10 +160,17 @@ async function main() {
       // const plyDataBuffer = new Uint8Array(data);
       if (keyframe == -1) {
         // process the initial ply
-        manager.setInitPly(data);
-        toolWorker.postMessage({ ply: data });
+        while (!manager.initCb) {
+          await sleep(100);
+        }
+        toolWorker.postMessage({ ply: data, extent: manager.initCb.extent, total: gsvMeta.total_gaussians, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
       } else {
-        manager.appendOneBuffer(data, keyframe, type);
+        manager.appendOneBuffer(null, keyframe, type);
+        // check if the init ply is loaded & if the meta data is ready
+        while (vertexCount == 0 || !manager.cbBuffer[keyframe]) {
+          await sleep(1000);
+        }
+        toolWorker.postMessage({ ply: data, extent: manager.cbBuffer[keyframe].extent, total: -1, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
         // load next group
         let nextIdx = manager.getNextIndex(type);
         if (nextIdx < 0) {
@@ -479,8 +489,6 @@ async function main() {
   let avgFps = 0;
   let start = 0;
 
-  let leftGamepadTrigger, rightGamepadTrigger;
-
   const frame = (now) => {
     let inv = invert4(viewMatrix);
     let shiftKey = activeKeys.includes("Shift") || activeKeys.includes("ShiftLeft") || activeKeys.includes("ShiftRight");
@@ -523,70 +531,7 @@ async function main() {
     }
     // console.log(activeKeys);
 
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     let isJumping = activeKeys.includes("Space");
-    for (let gamepad of gamepads) {
-      if (!gamepad) continue;
-
-      const axisThreshold = 0.1; // Threshold to detect when the axis is intentionally moved
-      const moveSpeed = 0.06;
-      const rotateSpeed = 0.02;
-
-      // Assuming the left stick controls translation (axes 0 and 1)
-      if (Math.abs(gamepad.axes[0]) > axisThreshold) {
-        inv = translate4(inv, moveSpeed * gamepad.axes[0], 0, 0);
-        carousel = false;
-      }
-      if (Math.abs(gamepad.axes[1]) > axisThreshold) {
-        inv = translate4(inv, 0, 0, -moveSpeed * gamepad.axes[1]);
-        carousel = false;
-      }
-      if (gamepad.buttons[12].pressed || gamepad.buttons[13].pressed) {
-        inv = translate4(inv, 0, -moveSpeed * (gamepad.buttons[12].pressed - gamepad.buttons[13].pressed), 0);
-        carousel = false;
-      }
-
-      if (gamepad.buttons[14].pressed || gamepad.buttons[15].pressed) {
-        inv = translate4(inv, -moveSpeed * (gamepad.buttons[14].pressed - gamepad.buttons[15].pressed), 0, 0);
-        carousel = false;
-      }
-
-      // Assuming the right stick controls rotation (axes 2 and 3)
-      if (Math.abs(gamepad.axes[2]) > axisThreshold) {
-        inv = rotate4(inv, rotateSpeed * gamepad.axes[2], 0, 1, 0);
-        carousel = false;
-      }
-      if (Math.abs(gamepad.axes[3]) > axisThreshold) {
-        inv = rotate4(inv, -rotateSpeed * gamepad.axes[3], 1, 0, 0);
-        carousel = false;
-      }
-
-      let tiltAxis = gamepad.buttons[6].value - gamepad.buttons[7].value;
-      if (Math.abs(tiltAxis) > axisThreshold) {
-        inv = rotate4(inv, rotateSpeed * tiltAxis, 0, 0, 1);
-        carousel = false;
-      }
-      if (gamepad.buttons[4].pressed && !leftGamepadTrigger) {
-        camera = cameras[(cameras.indexOf(camera) + 1) % cameras.length];
-        inv = invert4(getViewMatrix(camera));
-        carousel = false;
-      }
-      if (gamepad.buttons[5].pressed && !rightGamepadTrigger) {
-        camera = cameras[(cameras.indexOf(camera) + cameras.length - 1) % cameras.length];
-        inv = invert4(getViewMatrix(camera));
-        carousel = false;
-      }
-      leftGamepadTrigger = gamepad.buttons[4].pressed;
-      rightGamepadTrigger = gamepad.buttons[5].pressed;
-      if (gamepad.buttons[0].pressed) {
-        isJumping = true;
-        carousel = false;
-      }
-      if (gamepad.buttons[3].pressed) {
-        carousel = true;
-      }
-    }
-
     if (["KeyJ", "KeyK", "KeyL", "KeyI"].some((k) => activeKeys.includes(k))) {
       let d = 4;
       inv = translate4(inv, 0, 0, d);
@@ -738,8 +683,8 @@ async function main() {
   console.log('current time', new Date().toLocaleTimeString());
   plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
   downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
-  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
-  // downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
+  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
   await manager.blockUntilCanplay();

@@ -634,7 +634,6 @@ export var drc2plyModule = (() => {
       // end include: runtime_exceptions.js
       function findWasmBinary() {
         var f = '../wasm/drc2ply.wasm';
-        // var f = 'src/wasm/drc2ply.wasm';
         if (!isDataURI(f)) {
           return locateFile(f);
         }

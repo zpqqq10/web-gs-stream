@@ -58,6 +58,7 @@ class PlyWorker {
     // called after all tasks are done
     finish() {
         console.log('ply current time', new Date().toLocaleTimeString());
+        // console error here, no idea why
         // this.drcDecoder._free(this.inputPtr);
         // this.drcDecoder._free(this.outputPtr);
 
