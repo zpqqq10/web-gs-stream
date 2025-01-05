@@ -7,6 +7,7 @@ uniform highp usampler2D u_texture;
 uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
+uniform uint timestamp;
 
 in vec2 position;
 in int index;
@@ -19,9 +20,15 @@ void main () {
     uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
     vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1);
     vec4 pos2d = projection * cam;
+    uint visible_ts = cen.w & 0xffffu;
+    uint invisible_ts = (cen.w >> 16u) & 0xffffu;
 
     float clip = 1.2 * pos2d.w;
-    if (pos2d.z < -clip || pos2d.x < -clip || pos2d.x > clip || pos2d.y < -clip || pos2d.y > clip) {
+    if (pos2d.z < -clip || 
+        pos2d.x < -clip || pos2d.x > clip || 
+        pos2d.y < -clip || pos2d.y > clip ||
+        timestamp < visible_ts || timestamp >= invisible_ts
+        ) {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }

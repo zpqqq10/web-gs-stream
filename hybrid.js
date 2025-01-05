@@ -25,6 +25,23 @@ let cameras = [
   },
 ];
 
+// var fps = 15; // 目标帧率
+// var fpsInterval = 1000 / fps; // 每帧的时间间隔
+// var last = new Date().getTime(); // 上一帧的时间
+
+// function animate() {
+//   requestAnimationFrame(animate);
+//   var now = new Date().getTime(); // 当前帧的时间
+//   var elapsed = now - last; // 两帧之间的时间差
+
+//   if (elapsed > fpsInterval) {
+//     last = now - (elapsed % fpsInterval); // 更新上一帧的时间
+
+//     // 执行动画代码
+//     // drawSomething();
+//   }
+// }
+
 let camera = cameras[0];
 let defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
 let viewMatrix = defaultViewMatrix;
@@ -69,7 +86,7 @@ async function main() {
   const u_viewport = gl.getUniformLocation(program, "viewport");
   const u_focal = gl.getUniformLocation(program, "focal");
   const u_view = gl.getUniformLocation(program, "view");
-  const u_time = gl.getUniformLocation(program, "time");
+  const u_timestamp = gl.getUniformLocation(program, "timestamp");
 
   // positions
   const triangleVertices = new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]);
@@ -485,9 +502,13 @@ async function main() {
   let jumpDelta = 0;
   let vertexCount = 0;
 
+  // time for last frame to control fps
   let lastFrame = 0;
+  // to measure rendering fps
+  let lastFpsTime = 0;
   let avgFps = 0;
   let start = 0;
+  let targetFPSInterval = 1000 / 30;
 
   const frame = (now) => {
     let inv = invert4(viewMatrix);
@@ -529,9 +550,7 @@ async function main() {
       inv = translate4(inv, 0, 0, -0.1);
       resize();
     }
-    // console.log(activeKeys);
 
-    let isJumping = activeKeys.includes("Space");
     if (["KeyJ", "KeyK", "KeyL", "KeyI"].some((k) => activeKeys.includes(k))) {
       let d = 4;
       inv = translate4(inv, 0, 0, d);
@@ -552,7 +571,7 @@ async function main() {
       viewMatrix = invert4(inv);
     }
 
-    if (isJumping) {
+    if (activeKeys.includes("Space")) {
       jumpDelta = Math.min(1, jumpDelta + 0.05);
     } else {
       jumpDelta = Math.max(0, jumpDelta - 0.05);
@@ -566,23 +585,33 @@ async function main() {
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
     toolWorker.postMessage({ view: viewProj });
 
-    const currentFps = 1000 / (now - lastFrame) || 0;
+    // update fps hint
+    const currentFps = 1000 / (now - lastFpsTime) || 0;
     avgFps = (isFinite(avgFps) && avgFps) * 0.9 + currentFps * 0.1;
 
     if (vertexCount > 0) {
-      // document.getElementById("spinner").style.display = "none";
-      gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
-      gl.uniform1f(u_time, Math.sin(Date.now() / 1000) / 2 + 1 / 2);
+      var elapsed = now - lastFrame;
+      // update the frame
+      if (elapsed > targetFPSInterval) {
+        lastFrame = now - (elapsed % targetFPSInterval);
+        if (manager.canPlay) {
+          // control fps
+          manager.currentFrame = (manager.currentFrame + 1) % gsvMeta.duration;
+          gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+          gl.uniform1ui(u_timestamp, manager.currentFrame);
 
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
+        } else {
+          // wait for loading
+        }
+      }
     } else {
       gl.clear(gl.COLOR_BUFFER_BIT);
-      // document.getElementById("spinner").style.display = "";
-      start = Date.now() + 2000;
+      lastFrame = now;
     }
     fps.innerText = Math.round(avgFps) + " fps";
-    lastFrame = now;
+    lastFpsTime = now;
     requestAnimationFrame(frame);
   };
 
@@ -646,6 +675,7 @@ async function main() {
   gsvMeta = await metaReq.json()
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
+  targetFPSInterval = 1000 / gsvMeta.target_fps;
 
   // TODO atlas promise
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
@@ -653,7 +683,7 @@ async function main() {
   for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
     keyframes.push(padZeroStart(index.toString()));
   }
-  manager.setTotalGroups(keyframes.length);
+  manager.setTotalGroups(keyframes.length, gsvMeta.GOP);
 
 
   // video and canvas setting

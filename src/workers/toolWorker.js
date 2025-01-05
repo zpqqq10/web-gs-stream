@@ -129,12 +129,12 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         texdata = new Uint32Array(texwidth * texheight * 4); // 4 components per pixel (RGBA)
         positions = new Float32Array(total * 3);
     }
-    // compress all into 7 32-bit numbers
+    // compress all into 8 32-bit numbers
     var texdata_c = new Uint8ClampedArray(texdata.buffer);
     // to store the frame index, uint16
     var texdata_t = new Uint16Array(texdata.buffer);
     var texdata_f = new Float32Array(texdata.buffer);
-    console.log(vertexCount2Date, lastVertexCount, lastVertexCount == vertexCount2Date);
+    // console.log(vertexCount2Date, lastVertexCount, lastVertexCount == vertexCount2Date);
     console.time("build texture");
     for (let j = 0; j < vertexCount; j++) {
         row = j;

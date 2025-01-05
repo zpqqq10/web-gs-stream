@@ -5,6 +5,7 @@ export class Manager {
         this.drcDecoderInit = false;
         this.jsonDecoder = new TextDecoder();
         this.totalGroups = 0;
+        this.GOP = 30;
         this.highxyzBuffer = {};
         this.lowxyzBuffer = {};
         this.rotBuffer = {};
@@ -47,14 +48,13 @@ export class Manager {
     async blockUntilCanplay() {
         if (this.initPly == null && this.initCb == null) {
             document.getElementById("message").innerText = 'loading initial data';
-        } else {
-            document.getElementById("message").innerText = 'loading data';
         }
         while (!this.canPlay) {
+            document.getElementById("message").innerText = 'loading data';
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             // TODO 检查提前量
-            if (this.initCb != null && minloaded >= this.currentFrame + 1) {
+            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 2) {
                 this.canPlay = true;
             }
         }
@@ -115,8 +115,9 @@ export class Manager {
         this.drcDecoderInit = true;
     }
 
-    setTotalGroups(totalGroups) {
+    setTotalGroups(totalGroups, GOP) {
         this.totalGroups = totalGroups;
+        this.GOP = GOP;
         this.updateProgressHint(FTYPES.ply);
         this.updateProgressHint(FTYPES.highxyz);
         this.updateProgressHint(FTYPES.lowxyz);
