@@ -2,14 +2,14 @@ export const FTYPES = {
     ply: 1,
     highxyz: 2,
     lowxyz: 3,
-    rot: 4, 
+    rot: 4,
     cb: 5
 };
 
 export const preventDefault = (e) => {
     e.preventDefault();
     e.stopPropagation();
-  };
+};
 
 export function attachShaders(gl, vertexShaderSource, fragmentShaderSource) {
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
@@ -62,4 +62,35 @@ export async function sleep(ms) {
 
 export function padZeroStart(str, n = 6) {
     return (Array(n).join(0) + str).slice(-n);
+}
+
+export function setTexture(gl, texture, texData, texWidth, texHeight, index) {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_S,
+        gl.CLAMP_TO_EDGE,
+    );
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_T,
+        gl.CLAMP_TO_EDGE,
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA32UI,
+        texWidth,
+        texHeight,
+        0,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_INT,
+        texData,
+    );
+    // gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE0 + index);
+    // gl.bindTexture(gl.TEXTURE_2D, texture);
 }

@@ -3,7 +3,8 @@ export const vertexShaderSource = `
 precision highp float;
 precision highp int;
 
-uniform highp usampler2D u_texture;
+uniform highp usampler2D gs_texture;
+// uniform highp usampler2D atlas;
 uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
@@ -17,7 +18,7 @@ out vec2 vPosition;
 
 void main () {
     // xyz center
-    uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
+    uvec4 cen = texelFetch(gs_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
     vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1);
     vec4 pos2d = projection * cam;
     uint visible_ts = cen.w & 0xffffu;
@@ -33,7 +34,7 @@ void main () {
         return;
     }
 
-    uvec4 cov = texelFetch(u_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
+    uvec4 cov = texelFetch(gs_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
     vec2 u1 = unpackHalf2x16(cov.x), u2 = unpackHalf2x16(cov.y), u3 = unpackHalf2x16(cov.z);
     // covariance matrix in 3D
     mat3 Vrk = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y);

@@ -1,6 +1,6 @@
 import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSVSahders.js";
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4 } from "./src/utils/mathUtils.js";
-import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep } from "./src/utils/utils.js";
+import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture } from "./src/utils/utils.js";
 import { Manager } from "./src/Manager.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
@@ -98,11 +98,11 @@ async function main() {
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
 
-  var texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
+  var gstexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, gstexture);
 
-  var u_textureLocation = gl.getUniformLocation(program, "u_texture");
-  gl.uniform1i(u_textureLocation, 0);
+  var gs_textureLocation = gl.getUniformLocation(program, "gs_texture");
+  gl.uniform1i(gs_textureLocation, 0);
 
   const indexBuffer = gl.createBuffer();
   const a_index = gl.getAttribLocation(program, "index");
@@ -133,33 +133,7 @@ async function main() {
       const { texdata, texwidth, texheight } = e.data;
       // save the previous ply here
       plyTexData = texdata;
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_WRAP_S,
-        gl.CLAMP_TO_EDGE,
-      );
-      gl.texParameteri(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_WRAP_T,
-        gl.CLAMP_TO_EDGE,
-      );
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA32UI,
-        texwidth,
-        texheight,
-        0,
-        gl.RGBA_INTEGER,
-        gl.UNSIGNED_INT,
-        texdata,
-      );
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
+      setTexture(gl, gstexture, texdata, texwidth, texheight, 0);
 
     } else if (e.data.depthIndex) {
       const { depthIndex, viewProj } = e.data;
@@ -499,6 +473,7 @@ async function main() {
     { passive: false }
   );
 
+  // ** animation loop ** //
   let jumpDelta = 0;
   let vertexCount = 0;
 
@@ -616,6 +591,7 @@ async function main() {
   };
 
   frame();
+  // ** animation loop ** //
 
   window.addEventListener("hashchange", (e) => {
     try {
@@ -629,42 +605,8 @@ async function main() {
   document.addEventListener("dragover", preventDefault);
   document.addEventListener("dragleave", preventDefault);
 
-  let lastVertexCount = -1;
-  const chunkHandler = (chunk, buffer, remaining, chunks) => {
-    if (!remaining && chunk.type === "magic") {
-      let intView = new Uint32Array(buffer);
-      if (intView[0] !== 0x674b) throw new Error("This does not look like a splatv file");
-      chunks.push({ size: intView[1], type: "chunks" });
-    } else if (!remaining && chunk.type === "chunks") {
-      for (let chunk of JSON.parse(new TextDecoder("utf-8").decode(buffer))) {
-        chunks.push(chunk);
-        if (chunk.type === "splat") {
-          cameras = chunk.cameras;
-          camera = chunk.cameras[0];
-          resize();
-        }
-      }
-    } else if (chunk.type === "splat") {
-      if (vertexCount > lastVertexCount || remaining === 0) {
-        lastVertexCount = vertexCount;
-        toolWorker.postMessage({ texture: new Float32Array(buffer), remaining: remaining });
-        console.log("splat", remaining);
 
-        const texdata = new Uint32Array(buffer);
-        // console.log(texdata);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, chunk.texwidth, chunk.texheight, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, texdata);
-      }
-    } else if (!remaining) {
-      console.log("chunk", chunk, buffer);
-    }
-  };
-
+  // main work here
   const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
