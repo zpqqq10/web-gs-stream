@@ -678,6 +678,7 @@ async function main() {
   targetFPSInterval = 1000 / gsvMeta.target_fps;
 
   // TODO atlas promise
+  const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
   keyframes = [];
   for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
@@ -697,11 +698,14 @@ async function main() {
   rotCanvas.width = gsvMeta.image[0];
   rotCanvas.height = gsvMeta.image[0]
 
-  const cameraReq = await cameraPromise;
+  const [cameraReq, atlasReq] = await Promise.all([cameraPromise, atlasPromise]);
   if (cameraReq.status != 200) throw new Error(cameraReq.status + " Unable to load " + cameraReq.url);
+  if (atlasReq.status != 200) throw new Error(atlasReq.status + " Unable to load " + atlasReq.url);
   const cameraData = await cameraReq.json()
   cameras = cameraData;
   camera = cameraData[0];
+  const atlas = await atlasReq.arrayBuffer();
+  // TODO to texture and use in shader
 
   await manager.blockUntilAllReady();
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });
