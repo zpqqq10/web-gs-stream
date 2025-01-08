@@ -81,7 +81,7 @@ export class Manager {
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             // TODO 检查提前量
-            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 10) {
+            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) {
                 this.canPlay = true;
             }
         }

@@ -12,7 +12,7 @@ uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
 uniform uint timestamp;
-uniform uint resolution;
+uniform int resolution;
 uniform int offset_border;
 // int range of dynamics
 uniform ivec2 dynamics;
@@ -36,6 +36,15 @@ uvec2 deMorton2D(uint code) {
     return uvec2(deMorton(code), deMorton(code >> 1));
 }
 
+// w at first and then xyz
+vec4 quanternion_multiply(vec4 a, vec4 b) {
+    vec4 res = vec4(
+        a.x * b.x - dot(a.yzw, b.yzw),
+        a.x * b.yzw + b.x * a.yzw + cross(a.yzw, b.yzw)
+    );
+    return res / sqrt(dot(res, res));
+}
+
 
 void main () {
     // xyz center
@@ -48,6 +57,8 @@ void main () {
         return;
     }
     bool is_dynamic = (index >= dynamics.x && index < dynamics.y);
+    // offset on rotation
+    vec4 rot_offset;
 
     if(is_dynamic){
         // apply the offset
@@ -61,11 +72,31 @@ void main () {
         // mind the order here due to cv2 uses bgr
         uvec3 highxyz = texelFetch(highxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
         uvec3 lowxyz = texelFetch(lowxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
-        uvec4 rot = texelFetch(rot_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0);
+
+
+        // if to combine the quaternion in shader
+        // uint rot_bq0 = texelFetch(rot_texture, 
+        //     ivec2(((mapped_index + resolution * resolution * 0) & 0x3ff), (mapped_index + resolution * resolution * 0) >> 10), 0).r;
+        // uint rot_bq1 = texelFetch(rot_texture, 
+        //     ivec2(((mapped_index + resolution * resolution * 1) & 0x3ff), (mapped_index + resolution * resolution * 1) >> 10), 0).r;
+        // uint rot_bq2 = texelFetch(rot_texture, 
+        //     ivec2(((mapped_index + resolution * resolution * 2) & 0x3ff), (mapped_index + resolution * resolution * 2) >> 10), 0).r;
+        // uint rot_bq3 = texelFetch(rot_texture, 
+        //     ivec2(((mapped_index + resolution * resolution * 3) & 0x3ff), (mapped_index + resolution * resolution * 3) >> 10), 0).r;
+        // rot_offset = vec4(float(rot_bq0) / 127.5 - 1.0,
+        //                     float(rot_bq1) / 127.5 - 1.0,
+        //                     float(rot_bq2) / 127.5 - 1.0,
+        //                     float(rot_bq3) / 127.5 - 1.0);
+
+        uvec4 rot_bq = texelFetch(rot_texture, ivec2(mapped_index & 0x3ff, mapped_index >> 10), 0);
+        rot_offset = vec4(float(rot_bq.x) / 127.5 - 1.0,
+                            float(rot_bq.y) / 127.5 - 1.0,
+                            float(rot_bq.z) / 127.5 - 1.0,
+                            float(rot_bq.w) / 127.5 - 1.0);
+        rot_offset /= sqrt(dot(rot_offset, rot_offset));
 
         vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
-        // TODO calculate rotation
     } 
 
     vec4 cam = view * vec4(cen_position, 1);
@@ -80,12 +111,15 @@ void main () {
     }
     
     uvec4 cov = texelFetch(gs_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
-    vec3 scale = vec3(unpackHalf2x16(cov.x), unpackHalf2x16(cov.y).x);
+    vec3 scale = vec3(unpackHalf2x16(cov.x).xy, unpackHalf2x16(cov.y).x);
     vec4 rot = vec4(float((cov.z      ) & 0xffu) / 127.5 - 1.0, 
                     float((cov.z >> 8 ) & 0xffu) / 127.5 - 1.0, 
                     float((cov.z >> 16) & 0xffu) / 127.5 - 1.0, 
                     float((cov.z >> 24) & 0xffu) / 127.5 - 1.0);
     rot /= sqrt(dot(rot, rot));
+    if(is_dynamic){
+        rot = quanternion_multiply(rot, rot_offset);
+    }
 
     mat3 S = mat3(scale.x, 0.0, 0.0, 0.0, scale.y, 0.0, 0.0, 0.0, scale.z);
     mat3 R = mat3(

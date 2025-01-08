@@ -27,7 +27,12 @@ let cameras = [
 ];
 
 let camera = cameras[0];
-let defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
+let defaultViewMatrix = [
+  1, -0.0004, 0.055, 0,
+  0.025, 0.976, -0.206, 0,
+  -0.053, 0.208, 0.974, 0,
+  0.629, -1.478, 0.545, 1
+];
 let viewMatrix = defaultViewMatrix;
 let gsvMeta = {};
 let keyframes = [];
@@ -538,7 +543,9 @@ async function main() {
           // directly calculate from image resolution, so no need to divide by another 4
           setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
           setTexture(gl, lowxyzTexture, manager.getFromCurrentFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
-          setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 83);
+          // if to combine the quaternion in shader
+          // setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((4 * gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 81);
+          setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 84);
 
         } else {
           // wait for loading
@@ -585,7 +592,7 @@ async function main() {
   console.info({ gsvMeta })
   targetFPSInterval = 1000 / gsvMeta.target_fps;
   gl.uniform1i(u_offsetBorder, gsvMeta.offset_position_border);
-  gl.uniform1ui(u_resolution, gsvMeta.image[0]);
+  gl.uniform1i(u_resolution, gsvMeta.image[0]);
 
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))

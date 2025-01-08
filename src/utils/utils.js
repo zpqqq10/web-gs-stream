@@ -117,6 +117,30 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             gl.UNSIGNED_BYTE,
             texData,
         );
+    } else if (channels == 84) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA8UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texData,
+        );
+    } else if (channels == 81) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.R8UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RED_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texData,
+        );
     } else {
         throw new Error('unsupported channels');
     }

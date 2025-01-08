@@ -1,7 +1,6 @@
 import { FTYPES } from "../utils/utils.js";
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
 // import { loadPyodide } from "../utils/pyodide/pyodide.mjs";
-// import { loadPyodide } from "../utils/pyodide.js";
 let videoDownloader = null;
 
 // use pyodide here
@@ -12,13 +11,15 @@ class VideoExtracter {
         this.pyodide = undefined;
         // function for extracting frames from video
         this.extractFrames = undefined;
+        // reorganizing the rotation frame is quite fast here
+        // or it can be placed in shader
         this.pythonScript = `
         import os
         import cv2
         import numpy as np
         from js import console
       
-        def extract_frames_from_buffer(videoPath: str):
+        def extract_frames_from_buffer(videoPath: str, isGrey: bool):
             # Decode video
             video = cv2.VideoCapture(videoPath)
             if not video.isOpened():
@@ -29,7 +30,13 @@ class VideoExtracter {
                 ret, frame = video.read()
                 if not ret:
                     break
-                frames.append(frame.flatten())
+                if isGrey:
+                    reso = frame.shape[1]
+                    frames.append(frame[..., 0].reshape((4, reso, reso)).transpose(1, 2, 0).flatten())
+                    # if to combine the quaternion in shader
+                    # frames.append(frame[..., :1].flatten())
+                else:
+                    frames.append(frame.flatten())
             video.release()
             os.remove(videoPath)
             return np.array(frames)
@@ -68,15 +75,13 @@ class VideoExtracter {
         }
 
         await this.saveVideoToPyodideFS(dataBuffer, videoName);
-        // console.time('extract')
-        const npres = this.extractFrames(videoName);
+        const npres = this.extractFrames(videoName, type == FTYPES.rot);
         const frames = npres.toJs();
         // use transfer to speed up
         const transferableObject = {
             buffers: frames.map((buffer, index) => ({ id: index, buffer })),
         }
         const framesBuffer = frames.map((frame) => frame.buffer);
-        // console.timeEnd('extract')
         postMessage({ data: transferableObject, keyframe: keyframe, type: type }, framesBuffer);
 
     }
