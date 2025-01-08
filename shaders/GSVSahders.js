@@ -33,7 +33,6 @@ void main () {
         return;
     }
     bool is_dynamic = (index >= dynamics.x && index < dynamics.y);
-    vec3 debug;
 
     if(is_dynamic){
         // apply the offset
@@ -47,13 +46,8 @@ void main () {
 
         vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
-        // debug = xyz_offset;
         // TODO calculate rotation 先测试位移加得对不对，然后直接在这里计算旋转矩阵
     } 
-    else {
-        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
-        return;
-    }
 
     vec4 cam = view * vec4(cen_position, 1);
     vec4 pos2d = projection * cam;
@@ -94,9 +88,6 @@ void main () {
 
     //                                                          r                      g                      b                     a 
     vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
-    // if (is_dynamic) {
-    //     vColor = vec4(debug, 1.0);
-    // }
     vPosition = position;
 
     vec2 vCenter = vec2(pos2d) / pos2d.w;

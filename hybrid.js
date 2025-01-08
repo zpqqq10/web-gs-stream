@@ -537,8 +537,6 @@ async function main() {
           // directly calculate from image resolution, so no need to divide by another 4
           setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
           setTexture(gl, lowxyzTexture, manager.getFromCurrentFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
-          // setTexture(gl, highxyzTexture, high100[(manager.currentFrame % 60)], 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
-          // setTexture(gl, lowxyzTexture, low100[(manager.currentFrame % 60)], 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
           setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 83);
 
         } else {
