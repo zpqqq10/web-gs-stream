@@ -156,12 +156,6 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
             (attrs.scale_0 / 4095) * extent,
             (attrs.scale_1 / 4095) * extent,
             (attrs.scale_2 / 4905) * extent];
-        let rot = [
-            (attrs.rot_0) / 255 * 2 - 1,
-            (attrs.rot_1) / 255 * 2 - 1,
-            (attrs.rot_2) / 255 * 2 - 1,
-            (attrs.rot_3) / 255 * 2 - 1,
-        ];
 
         // for vanilla 3dgs
         // const qlen = Math.sqrt(
@@ -181,34 +175,15 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         //     attrs.rot_3 / qlen,
         // ];
 
-        // Compute the matrix product of S and R (M = S * R)
-        const M = [
-            1.0 - 2.0 * (rot[2] * rot[2] + rot[3] * rot[3]),
-            2.0 * (rot[1] * rot[2] + rot[0] * rot[3]),
-            2.0 * (rot[1] * rot[3] - rot[0] * rot[2]),
+        // scale
+        texdata[8 * joffset + 4] = packHalf2x16(scale[0], scale[1]);
+        texdata[8 * joffset + 5] = packHalf2x16(scale[2], 0);
 
-            2.0 * (rot[1] * rot[2] - rot[0] * rot[3]),
-            1.0 - 2.0 * (rot[1] * rot[1] + rot[3] * rot[3]),
-            2.0 * (rot[2] * rot[3] + rot[0] * rot[1]),
-
-            2.0 * (rot[1] * rot[3] + rot[0] * rot[2]),
-            2.0 * (rot[2] * rot[3] - rot[0] * rot[1]),
-            1.0 - 2.0 * (rot[1] * rot[1] + rot[2] * rot[2]),
-        ].map((k, i) => k * scale[Math.floor(i / 3)]);
-
-        // 3D covariance matrix
-        const sigma = [
-            M[0] * M[0] + M[3] * M[3] + M[6] * M[6],
-            M[0] * M[1] + M[3] * M[4] + M[6] * M[7],
-            M[0] * M[2] + M[3] * M[5] + M[6] * M[8],
-            M[1] * M[1] + M[4] * M[4] + M[7] * M[7],
-            M[1] * M[2] + M[4] * M[5] + M[7] * M[8],
-            M[2] * M[2] + M[5] * M[5] + M[8] * M[8],
-        ];
-
-        texdata[8 * joffset + 4] = packHalf2x16(4 * sigma[0], 4 * sigma[1]);
-        texdata[8 * joffset + 5] = packHalf2x16(4 * sigma[2], 4 * sigma[3]);
-        texdata[8 * joffset + 6] = packHalf2x16(4 * sigma[4], 4 * sigma[5]);
+        // rotation
+        texdata_c[4 * (8 * joffset + 6) + 0] = attrs.rot_0;
+        texdata_c[4 * (8 * joffset + 6) + 1] = attrs.rot_1;
+        texdata_c[4 * (8 * joffset + 6) + 2] = attrs.rot_2;
+        texdata_c[4 * (8 * joffset + 6) + 3] = attrs.rot_3;
 
         // r, g, b, a/opacity
         // the last 32-bit are used for RGBA (4 8-bit)

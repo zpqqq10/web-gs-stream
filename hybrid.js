@@ -73,6 +73,7 @@ async function main() {
   const u_focal = gl.getUniformLocation(program, "focal");
   const u_view = gl.getUniformLocation(program, "view");
   const u_timestamp = gl.getUniformLocation(program, "timestamp");
+  const u_resolution = gl.getUniformLocation(program, "resolution");
   const u_dynamics = gl.getUniformLocation(program, "dynamics");
   const u_offsetBorder = gl.getUniformLocation(program, "offset_border");
 
@@ -584,6 +585,7 @@ async function main() {
   console.info({ gsvMeta })
   targetFPSInterval = 1000 / gsvMeta.target_fps;
   gl.uniform1i(u_offsetBorder, gsvMeta.offset_position_border);
+  gl.uniform1ui(u_resolution, gsvMeta.image[0]);
 
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
@@ -629,12 +631,6 @@ async function main() {
 
   await manager.blockUntilCanplay();
 
-  // const url = params.get("url") ? new URL(params.get("url"), "https://huggingface.co/cakewalk/splat-data/resolve/main/") : "model.splatv";
-  // const url = "model.splatv";
-  // let req = await fetch(url, { mode: "cors", credentials: "omit" });
-  // if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
-
-  // await readChunks(req.body.getReader(), [{ size: 8, type: "magic" }], chunkHandler);
 }
 
 main().catch((err) => {

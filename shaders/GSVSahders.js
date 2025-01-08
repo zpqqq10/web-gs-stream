@@ -12,6 +12,7 @@ uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
 uniform uint timestamp;
+uniform uint resolution;
 uniform int offset_border;
 // int range of dynamics
 uniform ivec2 dynamics;
@@ -21,6 +22,20 @@ in int index;
 
 out vec4 vColor;
 out vec2 vPosition;
+
+uint deMorton(uint x) {
+    x = x & 0x55555555u;
+    x = (x ^ (x >> 1)) & 0x33333333u;
+    x = (x ^ (x >> 2)) & 0x0f0f0f0fu;
+    x = (x ^ (x >> 4)) & 0x00ff00ffu;
+    x = (x ^ (x >> 8)) & 0x0000ffffu;
+    return x;
+}
+
+uvec2 deMorton2D(uint code) {
+    return uvec2(deMorton(code), deMorton(code >> 1));
+}
+
 
 void main () {
     // xyz center
@@ -36,17 +51,21 @@ void main () {
 
     if(is_dynamic){
         // apply the offset
-        // int mapped_index = texelFetch(atlas_texture, ivec2(((index - dynamics.x) & 0x3ff), (index - dynamics.x) >> 10), 0).r;
+        // int mapped_index = texelFetch(atlas_texture, ivec2(( (index - dynamics.x) >> 10, (index - dynamics.x) & 0x3ff) ), 0).r;
 
         int mapped_index = index - dynamics.x;
-        // rgb ( bgr for cv2 )
+
+        // uvec2 coor = deMorton2D(uint(index - dynamics.x));
+        // int mapped_index = int(coor.y * resolution + coor.x);
+
+        // mind the order here due to cv2 uses bgr
         uvec3 highxyz = texelFetch(highxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
         uvec3 lowxyz = texelFetch(lowxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
         uvec4 rot = texelFetch(rot_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0);
 
         vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
-        // TODO calculate rotation 先测试位移加得对不对，然后直接在这里计算旋转矩阵
+        // TODO calculate rotation
     } 
 
     vec4 cam = view * vec4(cen_position, 1);
@@ -59,11 +78,23 @@ void main () {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
-
+    
     uvec4 cov = texelFetch(gs_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
-    vec2 u1 = unpackHalf2x16(cov.x), u2 = unpackHalf2x16(cov.y), u3 = unpackHalf2x16(cov.z);
-    // covariance matrix in 3D
-    mat3 Vrk = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y);
+    vec3 scale = vec3(unpackHalf2x16(cov.x), unpackHalf2x16(cov.y).x);
+    vec4 rot = vec4(float((cov.z      ) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.z >> 8 ) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.z >> 16) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.z >> 24) & 0xffu) / 127.5 - 1.0);
+    rot /= sqrt(dot(rot, rot));
+
+    mat3 S = mat3(scale.x, 0.0, 0.0, 0.0, scale.y, 0.0, 0.0, 0.0, scale.z);
+    mat3 R = mat3(
+        1.0 - 2.0 * (rot.z * rot.z + rot.w * rot.w), 2.0 * (rot.y * rot.z - rot.x * rot.w), 2.0 * (rot.y * rot.w + rot.x * rot.z),
+        2.0 * (rot.y * rot.z + rot.x * rot.w), 1.0 - 2.0 * (rot.y * rot.y + rot.w * rot.w), 2.0 * (rot.z * rot.w - rot.x * rot.y),
+        2.0 * (rot.y * rot.w - rot.x * rot.z), 2.0 * (rot.z * rot.w + rot.x * rot.y), 1.0 - 2.0 * (rot.y * rot.y + rot.z * rot.z));
+    mat3 M = S * R;
+    mat3 Vrk = 4.0 * transpose(M) * M;
+            
 
     // Jacobian matrix
     // gradient of (u, v) w.r.t. (x, y, z)
