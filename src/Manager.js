@@ -1,18 +1,22 @@
-import { sleep, FTYPES } from "./utils/utils.js"
+import { sleep, FTYPES, padZeroStart } from "./utils/utils.js"
 
 export class Manager {
     constructor() {
         this.drcDecoderInit = false;
+        this.videoExtracterInit = false;
         this.jsonDecoder = new TextDecoder();
         this.totalGroups = 0;
         this.GOP = 30;
+        this.duration = 300;
+        this.fps = 30;
         this.highxyzBuffer = {};
         this.lowxyzBuffer = {};
         this.rotBuffer = {};
         this.cbBuffer = {};
         // track how many **groups** are ready
         // help to indicate the progress
-        this.plyLoaded = 0;
+        // minus 1 for init ply
+        this.plyLoaded = -1;
         this.highxyzLoaded = 0;
         this.lowxyzLoaded = 0;
         this.rotLoaded = 0;
@@ -26,13 +30,13 @@ export class Manager {
     }
 
     // update the prompt in the middle
-    updatePrompt() {
-        document.getElementById("message").innerText = 'loading wasm';
+    updatePrompt(hint) {
+        document.getElementById("message").innerText = hint;
         var oldone = document.getElementById("message").innerText;
-        if (oldone.startsWith('loading wasm') && oldone.length == 10) {
+        if (oldone.startsWith(hint) && oldone.length == 10) {
             oldone = oldone + ".";
         } else {
-            oldone = 'loading wasm';
+            oldone = hint;
         }
         document.getElementById("message").innerText = oldone;
     }
@@ -40,10 +44,33 @@ export class Manager {
     async blockUntilAllReady() {
         while (!this.drcDecoderInit) {
             await sleep(300);
-            this.updatePrompt();
+            this.updatePrompt('loading wasm');
         }
         document.getElementById("message").innerText = 'DRC decoder ready';
+        while (!this.videoExtracterInit) {
+            await sleep(300);
+            this.updatePrompt('loading opencv');
+        }
+        document.getElementById("message").innerText = 'video extracter ready';
     }
+
+    // retrieve the data according to currentFrame
+    getFromCurrentFrame(type) {
+        var currentGroup = padZeroStart(Math.floor(this.currentFrame / this.GOP) * this.GOP);
+        switch (type) {
+            case FTYPES.cb:
+                return this.cbBuffer[currentGroup];
+            case FTYPES.highxyz:
+                return this.highxyzBuffer[currentGroup][this.currentFrame % this.GOP];
+            case FTYPES.lowxyz:
+                return this.lowxyzBuffer[currentGroup][this.currentFrame % this.GOP];
+            case FTYPES.rot:
+                return this.rotBuffer[currentGroup][this.currentFrame % this.GOP];
+            default:
+                break;
+        }
+    }
+
 
     async blockUntilCanplay() {
         if (this.initPly == null && this.initCb == null) {
@@ -54,7 +81,7 @@ export class Manager {
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             // TODO 检查提前量
-            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 2) {
+            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 10) {
                 this.canPlay = true;
             }
         }
@@ -69,23 +96,23 @@ export class Manager {
         } else if (type === FTYPES.highxyz) {
             if (this.highxyzBuffer[key] == undefined) {
                 this.highxyzBuffer[key] = [];
-                this.highxyzBuffer[key].push(buffer);
+                this.highxyzBuffer[key].push(new Uint8Array(buffer));
             } else {
-                this.highxyzBuffer[key].push(buffer);
+                this.highxyzBuffer[key].push(new Uint8Array(buffer));
             }
         } else if (type === FTYPES.lowxyz) {
             if (this.lowxyzBuffer[key] == undefined) {
                 this.lowxyzBuffer[key] = [];
-                this.lowxyzBuffer[key].push(buffer);
+                this.lowxyzBuffer[key].push(new Uint8Array(buffer));
             } else {
-                this.lowxyzBuffer[key].push(buffer);
+                this.lowxyzBuffer[key].push(new Uint8Array(buffer));
             }
         } else if (type === FTYPES.rot) {
             if (this.rotBuffer[key] == undefined) {
                 this.rotBuffer[key] = [];
-                this.rotBuffer[key].push(buffer);
+                this.rotBuffer[key].push(new Uint8Array(buffer));
             } else {
-                this.rotBuffer[key].push(buffer);
+                this.rotBuffer[key].push(new Uint8Array(buffer));
             }
         } else if (type === FTYPES.cb) {
             const jsonData = JSON.parse(this.jsonDecoder.decode(buffer));
@@ -115,9 +142,15 @@ export class Manager {
         this.drcDecoderInit = true;
     }
 
-    setTotalGroups(totalGroups, GOP) {
+    initExtracter() {
+        this.videoExtracterInit = true;
+    }
+
+    setMetaInfo(totalGroups, GOP, duration, target_fps) {
         this.totalGroups = totalGroups;
         this.GOP = GOP;
+        this.duration = duration;
+        this.fps = target_fps;
         this.updateProgressHint(FTYPES.ply);
         this.updateProgressHint(FTYPES.highxyz);
         this.updateProgressHint(FTYPES.lowxyz);
@@ -128,15 +161,20 @@ export class Manager {
     // update the progress hint in the top-left corner
     updateProgressHint(type) {
         if (type === FTYPES.ply) {
-            document.getElementById("plyProgress").innerText = 'ply: ' + this.plyLoaded + '/' + this.totalGroups;
+            document.getElementById("plyProgress").innerText = 'ply: ' + (this.plyLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps);
         } else if (type === FTYPES.highxyz) {
-            document.getElementById("highProgress").innerText = 'high: ' + this.highxyzLoaded + '/' + this.totalGroups;
+            document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps);;
         } else if (type === FTYPES.lowxyz) {
-            document.getElementById("lowProgress").innerText = 'low: ' + this.lowxyzLoaded + '/' + this.totalGroups;
+            document.getElementById("lowProgress").innerText = 'low: ' + (this.lowxyzLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps);;
         } else if (type === FTYPES.rot) {
-            document.getElementById("rotProgress").innerText = 'rot: ' + this.rotLoaded + '/' + this.totalGroups;
+            document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps);
         } else if (type === FTYPES.cb) {
-            document.getElementById("cbProgress").innerText = 'codebooks: ' + this.cbLoaded + '/' + this.totalGroups;
+            document.getElementById("cbProgress").innerText = 'codebooks: ' + (this.cbLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps);;
         }
     }
 
@@ -167,7 +205,7 @@ export class Manager {
 
     reload() {
         this.drcDecoderInit = false;
-        this.videoDecoderInit = false;
+        this.videoExtracterInit = false;
         this.highxyzBuffer = {};
         this.lowxyzBuffer = {};
         this.rotBuffer = {};

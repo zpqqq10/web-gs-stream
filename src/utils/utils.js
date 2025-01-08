@@ -64,7 +64,9 @@ export function padZeroStart(str, n = 6) {
     return (Array(n).join(0) + str).slice(-n);
 }
 
-export function setTexture(gl, texture, texData, texWidth, texHeight, index) {
+export function setTexture(gl, texture, texData, texWidth, texHeight, index, channels = 324) {
+    // activate before binding
+    gl.activeTexture(gl.TEXTURE0 + index);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(
         gl.TEXTURE_2D,
@@ -79,18 +81,45 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA32UI,
-        texWidth,
-        texHeight,
-        0,
-        gl.RGBA_INTEGER,
-        gl.UNSIGNED_INT,
-        texData,
-    );
+    if (channels == 324) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA32UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_INT,
+            texData,
+        );
+    } else if (channels == 321) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.R32I,
+            texWidth,
+            texHeight,
+            0,
+            gl.RED_INTEGER,
+            gl.INT,
+            texData,
+        );
+    } else if (channels == 83) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGB8UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texData,
+        );
+    } else {
+        throw new Error('unsupported channels');
+    }
     // gl.activeTexture(gl.TEXTURE0);
-    gl.activeTexture(gl.TEXTURE0 + index);
     // gl.bindTexture(gl.TEXTURE_2D, texture);
 }

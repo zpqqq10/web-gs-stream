@@ -4,8 +4,9 @@ import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture 
 import { Manager } from "./src/Manager.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
-const PlyWorkerUrl = './src/workers/plyWorker.js';
+const PlyDownloaderUrl = './src/workers/plyDownloader.js';
 const VideoDownloaderUrl = './src/workers/videoDownloader.js';
+const VideoExtracterUrl = './src/workers/videoExtracter.js';
 const CBDownloaderUrl = './src/workers/cbDownloader.js';
 
 let cameras = [
@@ -25,23 +26,6 @@ let cameras = [
   },
 ];
 
-// var fps = 15; // 目标帧率
-// var fpsInterval = 1000 / fps; // 每帧的时间间隔
-// var last = new Date().getTime(); // 上一帧的时间
-
-// function animate() {
-//   requestAnimationFrame(animate);
-//   var now = new Date().getTime(); // 当前帧的时间
-//   var elapsed = now - last; // 两帧之间的时间差
-
-//   if (elapsed > fpsInterval) {
-//     last = now - (elapsed % fpsInterval); // 更新上一帧的时间
-
-//     // 执行动画代码
-//     // drawSomething();
-//   }
-// }
-
 let camera = cameras[0];
 let defaultViewMatrix = [0.99, 0.01, -0.14, 0, 0.02, 0.99, 0.12, 0, 0.14, -0.12, 0.98, 0, -0.09, -0.26, 0.2, 1];
 let viewMatrix = defaultViewMatrix;
@@ -59,12 +43,14 @@ async function main() {
   } catch (err) { }
 
   const toolWorker = new Worker(ToolWorkerUrl, { type: 'module' });
-  const plyWorker = new Worker(PlyWorkerUrl, { type: 'module' });
-  const downloader = new Worker(VideoDownloaderUrl, { type: 'module' });
+  const plyDownloader = new Worker(PlyDownloaderUrl, { type: 'module' });
+  const videoDownloader = new Worker(VideoDownloaderUrl, { type: 'module' });
+  const videoExtracter = new Worker(VideoExtracterUrl, { type: 'module' });
   const cbdownloader = new Worker(CBDownloaderUrl, { type: 'module' });
-  downloader.postMessage({ msg: 'init' });
+  videoDownloader.postMessage({ msg: 'init' });
+  videoExtracter.postMessage({ msg: 'init' });
   cbdownloader.postMessage({ msg: 'init' });
-  plyWorker.postMessage({ msg: 'init' });
+  plyDownloader.postMessage({ msg: 'init' });
   const canvas = document.getElementById("canvas");
   const fps = document.getElementById("fps");
 
@@ -87,6 +73,8 @@ async function main() {
   const u_focal = gl.getUniformLocation(program, "focal");
   const u_view = gl.getUniformLocation(program, "view");
   const u_timestamp = gl.getUniformLocation(program, "timestamp");
+  const u_dynamics = gl.getUniformLocation(program, "dynamics");
+  const u_offsetBorder = gl.getUniformLocation(program, "offset_border");
 
   // positions
   const triangleVertices = new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]);
@@ -98,11 +86,24 @@ async function main() {
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
 
-  var gstexture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, gstexture);
+  var gsTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, gsTexture);
+  var atlasTexture = gl.createTexture();
+  var highxyzTexture = gl.createTexture();
+  var lowxyzTexture = gl.createTexture();
+  var rotTexture = gl.createTexture();
+  // gl.bindTexture(gl.TEXTURE_2D, atlastexture);
 
   var gs_textureLocation = gl.getUniformLocation(program, "gs_texture");
   gl.uniform1i(gs_textureLocation, 0);
+  var atlas_textureLocation = gl.getUniformLocation(program, "atlas_texture");
+  gl.uniform1i(atlas_textureLocation, 1);
+  var highxyz_textureLocation = gl.getUniformLocation(program, "highxyz_texture");
+  gl.uniform1i(highxyz_textureLocation, 2);
+  var lowxyz_textureLocation = gl.getUniformLocation(program, "lowxyz_texture");
+  gl.uniform1i(lowxyz_textureLocation, 3);
+  var rot_textureLocation = gl.getUniformLocation(program, "rot_texture");
+  gl.uniform1i(rot_textureLocation, 4);
 
   const indexBuffer = gl.createBuffer();
   const a_index = gl.getAttribLocation(program, "index");
@@ -133,8 +134,16 @@ async function main() {
       const { texdata, texwidth, texheight } = e.data;
       // save the previous ply here
       plyTexData = texdata;
-      setTexture(gl, gstexture, texdata, texwidth, texheight, 0);
-
+      setTexture(gl, gsTexture, texdata, texwidth, texheight, 0);
+      manager.appendOneBuffer(null, null, FTYPES.ply);
+      // TODO 这里可以加一个bool变量，判断上一个drc解压完没有，没有的话就等待；或者直接不传drc
+      // load next group
+      let nextIdx = manager.getNextIndex(FTYPES.ply);
+      if (nextIdx < 0) {
+        plyDownloader.postMessage({ msg: 'finish' });
+      } else {
+        plyDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+      }
     } else if (e.data.depthIndex) {
       const { depthIndex, viewProj } = e.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
@@ -143,12 +152,11 @@ async function main() {
     }
   };
 
-  plyWorker.onmessage = async (e) => {
+  plyDownloader.onmessage = async (e) => {
     if (e.data.msg && e.data.msg == 'ready') {
       manager.initDrcDecoder();
     } else if (e.data.type && e.data.type == FTYPES.ply) {
       const { data, keyframe, type } = e.data;
-      // const plyDataBuffer = new Uint8Array(data);
       if (keyframe == -1) {
         // process the initial ply
         while (!manager.initCb) {
@@ -156,95 +164,44 @@ async function main() {
         }
         toolWorker.postMessage({ ply: data, extent: manager.initCb.extent, total: gsvMeta.total_gaussians, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
       } else {
-        manager.appendOneBuffer(null, keyframe, type);
         // check if the init ply is loaded & if the meta data is ready
-        while (vertexCount == 0 || !manager.cbBuffer[keyframe]) {
-          await sleep(1000);
+        // to ensure in-order processing
+        while (vertexCount == 0 || !manager.cbBuffer[keyframe] || !plyTexData) {
+          await sleep(100);
         }
         toolWorker.postMessage({ ply: data, extent: manager.cbBuffer[keyframe].extent, total: -1, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
-        // load next group
-        let nextIdx = manager.getNextIndex(type);
-        if (nextIdx < 0) {
-          plyWorker.postMessage({ msg: 'finish' });
-        } else {
-          plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
-        }
+      }
+      // set undefined to ensure in-order processing
+      plyTexData = undefined;
+    }
+  };
+
+  videoExtracter.onmessage = async (e) => {
+    if (e.data.msg && e.data.msg == 'ready') {
+      manager.initExtracter();
+    } else if (e.data.type && e.data.type >= FTYPES.highxyz && e.data.type <= FTYPES.rot) {
+      const { data, keyframe, type } = e.data;
+      for (let i = 0; i < data.buffers.length; i++) {
+        const buffer = data.buffers[i].buffer;
+        manager.appendOneBuffer(buffer, keyframe, type);
+      }
+      manager.incrementVideoLoaded(type);
+      // load next group
+      let nextIdx = manager.getNextIndex(type);
+      if (nextIdx < 0) {
+        videoDownloader.postMessage({ msg: 'finish' });
+      } else {
+        videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx], type: type });
       }
     }
   };
 
-  downloader.onmessage = async (e) => {
+  videoDownloader.onmessage = async (e) => {
     if (e.data.msg && e.data.msg == 'ready') {
       // do nothing
     } else if (e.data.type) {
       const { data, keyframe, type } = e.data;
-      // const plyDataBuffer = new Uint8Array(data);
-      // determine which to use
-      let videoEleName = '';
-      let canvasEleName = '';
-      switch (type) {
-        case FTYPES.lowxyz:
-          videoEleName = 'lowxyzVideo';
-          canvasEleName = 'lowxyzCanvas';
-          break;
-        case FTYPES.highxyz:
-          videoEleName = 'highxyzVideo';
-          canvasEleName = 'highxyzCanvas';
-          break;
-        case FTYPES.rot:
-          videoEleName = 'rotVideo';
-          canvasEleName = 'rotCanvas';
-          break;
-        default:
-          throw new Error('unknown type');
-      }
-
-      const videoEle = document.getElementById(videoEleName);
-      const canvasEle = document.getElementById(canvasEleName);
-      const captureCtx = canvasEle.getContext('2d', { willReadFrequently: true });
-
-      const blob = new Blob([data], { type: 'video/mp4' });
-      const videoUrl = URL.createObjectURL(blob);
-      videoEle.src = videoUrl;
-
-      // TODO 这里可能会有性能问题
-      await startFrameCapture();
-      async function startFrameCapture() {
-        try {
-          // 确保视频可以播放
-          await new Promise((resolve, reject) => {
-            videoEle.oncanplay = resolve;
-            videoEle.onerror = reject;
-          });
-
-          // 开始逐帧捕获
-          for (let currentTime = 0; currentTime < videoEle.duration; currentTime += gsvMeta.frameDuration) {
-
-            videoEle.pause()
-            videoEle.currentTime = currentTime;
-            await new Promise((resolve) => {
-              videoEle.onseeked = resolve;
-            });
-
-            // 捕获当前帧
-            captureCtx.drawImage(videoEle, 0, 0, canvasEle.width, canvasEle.height);
-
-            // 获取帧的像素数据
-            const imageData = captureCtx.getImageData(0, 0, canvasEle.width, canvasEle.height);
-            manager.appendOneBuffer(imageData.data.buffer, keyframe, type);
-          }
-          manager.incrementVideoLoaded(type);
-
-          let nextIdx = manager.getNextIndex(type);
-          if (nextIdx < 0) {
-            downloader.postMessage({ msg: 'finish' });
-          } else {
-            downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx], type: type });
-          }
-        } catch (error) {
-          console.error('Error during frame capture:', error);
-        }
-      }
+      videoExtracter.postMessage({ data: data, keyframe: keyframe, type: type }, [data]);
 
     }
   };
@@ -484,6 +441,7 @@ async function main() {
   let avgFps = 0;
   let start = 0;
   let targetFPSInterval = 1000 / 30;
+  let currentCb;
 
   const frame = (now) => {
     let inv = invert4(viewMatrix);
@@ -568,19 +526,27 @@ async function main() {
       var elapsed = now - lastFrame;
       // update the frame
       if (elapsed > targetFPSInterval) {
-        lastFrame = now - (elapsed % targetFPSInterval);
+        lastFrame = now - (elapsed % (targetFPSInterval));
         if (manager.canPlay) {
           // control fps
           manager.currentFrame = (manager.currentFrame + 1) % gsvMeta.duration;
+          currentCb = manager.getFromCurrentFrame(FTYPES.cb);
           gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
           gl.uniform1ui(u_timestamp, manager.currentFrame);
+          gl.uniform2iv(u_dynamics, new Int32Array([currentCb.dynamic_start, currentCb.dynamic_end]));
+          // directly calculate from image resolution, so no need to divide by another 4
+          setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
+          setTexture(gl, lowxyzTexture, manager.getFromCurrentFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
+          // setTexture(gl, highxyzTexture, high100[(manager.currentFrame % 60)], 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
+          // setTexture(gl, lowxyzTexture, low100[(manager.currentFrame % 60)], 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
+          setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 83);
 
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
         } else {
           // wait for loading
         }
       }
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
     } else {
       gl.clear(gl.COLOR_BUFFER_BIT);
       lastFrame = now;
@@ -607,7 +573,8 @@ async function main() {
 
 
   // main work here
-  const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
+  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
+  const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepinseq/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
@@ -618,15 +585,15 @@ async function main() {
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
   targetFPSInterval = 1000 / gsvMeta.target_fps;
+  gl.uniform1i(u_offsetBorder, gsvMeta.offset_position_border);
 
-  // TODO atlas promise
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
   keyframes = [];
   for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
     keyframes.push(padZeroStart(index.toString()));
   }
-  manager.setTotalGroups(keyframes.length, gsvMeta.GOP);
+  manager.setMetaInfo(keyframes.length, gsvMeta.GOP, gsvMeta.duration, gsvMeta.target_fps);
 
 
   // video and canvas setting
@@ -647,20 +614,19 @@ async function main() {
   cameras = cameraData;
   camera = cameraData[0];
   const atlas = await atlasReq.arrayBuffer();
-  // TODO to texture and use in shader
+  setTexture(gl, atlasTexture, new Int32Array(atlas), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 1, 321);
 
   await manager.blockUntilAllReady();
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });
-  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: -1 });
+  plyDownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });
   await sleep(300);
 
 
   // current time
   console.log('current time', new Date().toLocaleTimeString());
-  plyWorker.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
-  downloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
+  videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
+  videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
+  videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
   await manager.blockUntilCanplay();

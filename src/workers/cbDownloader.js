@@ -39,5 +39,7 @@ onmessage = (e) => {
         cbDownloader.reload(e.data.baseUrl, e.data.keyframe);
     } else if (e.data.msg && e.data.msg === 'init') {
         cbDownloader = new CBDownloader();
+    } else if (e.data.msg && e.data.msg === 'finish') {
+        cbDownloader.finish();
     }
 };

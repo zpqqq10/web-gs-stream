@@ -22,7 +22,8 @@ function runSort(viewProj) {
         lastVertexCount = vertexCount2Date;
     }
 
-    console.time("sort");
+    // console.time("sort");
+    // TODO 说不定这里就可以直接考虑visible/invisible了
     let maxDepth = -Infinity;
     let minDepth = Infinity;
     let sizeList = new Int32Array(vertexCount2Date);
@@ -47,8 +48,7 @@ function runSort(viewProj) {
     depthIndex = new Uint32Array(vertexCount2Date);
     for (let i = 0; i < vertexCount2Date; i++) depthIndex[starts0[sizeList[i]]++] = i;
 
-    console.timeEnd("sort");
-
+    // console.timeEnd("sort");
     lastProj = viewProj;
     postMessage({ depthIndex, viewProj, vertexCount: vertexCount2Date }, [depthIndex.buffer]);
 }
