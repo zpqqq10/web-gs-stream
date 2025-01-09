@@ -4,7 +4,7 @@ precision highp float;
 precision highp int;
 
 uniform highp usampler2D gs_texture;
-uniform highp isampler2D atlas_texture;
+uniform highp usampler2D atlas_texture;
 uniform highp usampler2D highxyz_texture;
 uniform highp usampler2D lowxyz_texture;
 uniform highp usampler2D rot_texture;
@@ -22,19 +22,6 @@ in int index;
 
 out vec4 vColor;
 out vec2 vPosition;
-
-uint deMorton(uint x) {
-    x = x & 0x55555555u;
-    x = (x ^ (x >> 1)) & 0x33333333u;
-    x = (x ^ (x >> 2)) & 0x0f0f0f0fu;
-    x = (x ^ (x >> 4)) & 0x00ff00ffu;
-    x = (x ^ (x >> 8)) & 0x0000ffffu;
-    return x;
-}
-
-uvec2 deMorton2D(uint code) {
-    return uvec2(deMorton(code), deMorton(code >> 1));
-}
 
 // w at first and then xyz
 vec4 quanternion_multiply(vec4 a, vec4 b) {
@@ -62,33 +49,32 @@ void main () {
 
     if(is_dynamic){
         // apply the offset
-        // int mapped_index = texelFetch(atlas_texture, ivec2(( (index - dynamics.x) >> 10, (index - dynamics.x) & 0x3ff) ), 0).r;
+        // uvec2 img_coord = texelFetch(atlas_texture, ivec2(((index - dynamics.x) & 0x3ff, (index - dynamics.x) >> 10) ), 0).rg;
 
-        int mapped_index = index - dynamics.x;
-
-        // uvec2 coor = deMorton2D(uint(index - dynamics.x));
-        // int mapped_index = int(coor.y * resolution + coor.x);
+        // int mapped_index = index - dynamics.x;
+        // int mapped_index = int(img_coord.x) * resolution + int(img_coord.y);
+        uint mapped_index = texelFetch(atlas_texture, ivec2(((index - dynamics.x) & 0x3ff), (index - dynamics.x) >> 10), 0).r;
 
         // mind the order here due to cv2 uses bgr
-        uvec3 highxyz = texelFetch(highxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
-        uvec3 lowxyz = texelFetch(lowxyz_texture, ivec2((mapped_index & 0x3ff), mapped_index >> 10), 0).rgb;
+        uvec3 highxyz = texelFetch(highxyz_texture, ivec2((mapped_index & 0x3ffu), mapped_index >> 10), 0).rgb;
+        uvec3 lowxyz = texelFetch(lowxyz_texture, ivec2((mapped_index & 0x3ffu), mapped_index >> 10), 0).rgb;
 
 
         // if to combine the quaternion in shader
         // uint rot_bq0 = texelFetch(rot_texture, 
-        //     ivec2(((mapped_index + resolution * resolution * 0) & 0x3ff), (mapped_index + resolution * resolution * 0) >> 10), 0).r;
+        //     ivec2(((mapped_index + resolution * resolution * 0) & 0x3ffu), (mapped_index + resolution * resolution * 0) >> 10), 0).r;
         // uint rot_bq1 = texelFetch(rot_texture, 
-        //     ivec2(((mapped_index + resolution * resolution * 1) & 0x3ff), (mapped_index + resolution * resolution * 1) >> 10), 0).r;
+        //     ivec2(((mapped_index + resolution * resolution * 1) & 0x3ffu), (mapped_index + resolution * resolution * 1) >> 10), 0).r;
         // uint rot_bq2 = texelFetch(rot_texture, 
-        //     ivec2(((mapped_index + resolution * resolution * 2) & 0x3ff), (mapped_index + resolution * resolution * 2) >> 10), 0).r;
+        //     ivec2(((mapped_index + resolution * resolution * 2) & 0x3ffu), (mapped_index + resolution * resolution * 2) >> 10), 0).r;
         // uint rot_bq3 = texelFetch(rot_texture, 
-        //     ivec2(((mapped_index + resolution * resolution * 3) & 0x3ff), (mapped_index + resolution * resolution * 3) >> 10), 0).r;
+        //     ivec2(((mapped_index + resolution * resolution * 3) & 0x3ffu), (mapped_index + resolution * resolution * 3) >> 10), 0).r;
         // rot_offset = vec4(float(rot_bq0) / 127.5 - 1.0,
         //                     float(rot_bq1) / 127.5 - 1.0,
         //                     float(rot_bq2) / 127.5 - 1.0,
         //                     float(rot_bq3) / 127.5 - 1.0);
 
-        uvec4 rot_bq = texelFetch(rot_texture, ivec2(mapped_index & 0x3ff, mapped_index >> 10), 0);
+        uvec4 rot_bq = texelFetch(rot_texture, ivec2(mapped_index & 0x3ffu, mapped_index >> 10), 0);
         rot_offset = vec4(float(rot_bq.x) / 127.5 - 1.0,
                             float(rot_bq.y) / 127.5 - 1.0,
                             float(rot_bq.z) / 127.5 - 1.0,

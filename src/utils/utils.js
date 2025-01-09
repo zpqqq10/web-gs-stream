@@ -64,7 +64,7 @@ export function padZeroStart(str, n = 6) {
     return (Array(n).join(0) + str).slice(-n);
 }
 
-export function setTexture(gl, texture, texData, texWidth, texHeight, index, channels = 324) {
+export function setTexture(gl, texture, texData, texWidth, texHeight, index, channels = '32rgba') {
     // activate before binding
     gl.activeTexture(gl.TEXTURE0 + index);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -81,7 +81,7 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    if (channels == 324) {
+    if (channels == '32rgbaui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -93,19 +93,19 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             gl.UNSIGNED_INT,
             texData,
         );
-    } else if (channels == 321) {
+    } else if (channels == '32rui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.R32I,
+            gl.R32UI,
             texWidth,
             texHeight,
             0,
             gl.RED_INTEGER,
-            gl.INT,
+            gl.UNSIGNED_INT,
             texData,
         );
-    } else if (channels == 83) {
+    } else if (channels == '8rgbui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -117,7 +117,7 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             gl.UNSIGNED_BYTE,
             texData,
         );
-    } else if (channels == 84) {
+    } else if (channels == '8rgbaui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -129,7 +129,7 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             gl.UNSIGNED_BYTE,
             texData,
         );
-    } else if (channels == 81) {
+    } else if (channels == '8rui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -139,6 +139,18 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             0,
             gl.RED_INTEGER,
             gl.UNSIGNED_BYTE,
+            texData,
+        );
+    } else if (channels == '16rgui') {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RG16UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RG_INTEGER,
+            gl.UNSIGNED_SHORT,
             texData,
         );
     } else {

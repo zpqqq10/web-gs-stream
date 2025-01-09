@@ -140,9 +140,8 @@ async function main() {
       const { texdata, texwidth, texheight } = e.data;
       // save the previous ply here
       plyTexData = texdata;
-      setTexture(gl, gsTexture, texdata, texwidth, texheight, 0);
+      setTexture(gl, gsTexture, texdata, texwidth, texheight, 0, '32rgbaui');
       manager.appendOneBuffer(null, null, FTYPES.ply);
-      // TODO 这里可以加一个bool变量，判断上一个drc解压完没有，没有的话就等待；或者直接不传drc
       // load next group
       let nextIdx = manager.getNextIndex(FTYPES.ply);
       if (nextIdx < 0) {
@@ -541,11 +540,11 @@ async function main() {
           gl.uniform1ui(u_timestamp, manager.currentFrame);
           gl.uniform2iv(u_dynamics, new Int32Array([currentCb.dynamic_start, currentCb.dynamic_end]));
           // directly calculate from image resolution, so no need to divide by another 4
-          setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, 83);
-          setTexture(gl, lowxyzTexture, manager.getFromCurrentFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, 83);
+          setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, '8rgbui');
+          setTexture(gl, lowxyzTexture, manager.getFromCurrentFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 3, '8rgbui');
           // if to combine the quaternion in shader
-          // setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((4 * gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 81);
-          setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, 84);
+          // setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((4 * gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, '8rui');
+          setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, '8rgbaui');
 
         } else {
           // wait for loading
@@ -580,7 +579,8 @@ async function main() {
 
   // main work here
   // const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
-  const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepinseq/';
+  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepin/';
+  const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/flame_salmon_40s/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
@@ -621,7 +621,8 @@ async function main() {
   cameras = cameraData;
   camera = cameraData[0];
   const atlas = await atlasReq.arrayBuffer();
-  setTexture(gl, atlasTexture, new Int32Array(atlas), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 1, 321);
+  // atlas: morton order as the index and return the index in the image
+  setTexture(gl, atlasTexture, new Uint32Array(atlas), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 1, '32rui');
 
   await manager.blockUntilAllReady();
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: -1 });

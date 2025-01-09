@@ -80,7 +80,6 @@ export class Manager {
             document.getElementById("message").innerText = 'loading data';
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
-            // TODO 检查提前量
             if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) {
                 this.canPlay = true;
             }
@@ -161,7 +160,7 @@ export class Manager {
     // update the progress hint in the top-left corner
     updateProgressHint(type) {
         if (type === FTYPES.ply) {
-            document.getElementById("plyProgress").innerText = 'ply: ' + (this.plyLoaded * this.GOP / this.fps).toFixed(2)
+            document.getElementById("plyProgress").innerText = 'ply: ' + ((this.plyLoaded < 0 ? 0 : this.plyLoaded) * this.GOP / this.fps).toFixed(2)
                 + '/' + Math.floor(this.duration / this.fps);
         } else if (type === FTYPES.highxyz) {
             document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
