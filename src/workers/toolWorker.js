@@ -23,7 +23,7 @@ function runSort(viewProj) {
     }
 
     // console.time("sort");
-    // TODO 说不定这里就可以直接考虑visible/invisible了
+    // not cosider visibility here, since sorting is relevant to camera but not time
     let maxDepth = -Infinity;
     let minDepth = Infinity;
     let sizeList = new Int32Array(vertexCount2Date);
@@ -142,12 +142,13 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         let joffset = j + lastVertexCount;
 
         // first 3 32-bit are used for XYZ
-        texdata_f[8 * joffset + 0] = attrs.x;
-        texdata_f[8 * joffset + 1] = attrs.y;
-        texdata_f[8 * joffset + 2] = attrs.z;
         positions[3 * joffset + 0] = attrs.x;
         positions[3 * joffset + 1] = attrs.y;
         positions[3 * joffset + 2] = attrs.z;
+
+        texdata_f[8 * joffset + 0] = attrs.x;
+        texdata_f[8 * joffset + 1] = attrs.y;
+        texdata_f[8 * joffset + 2] = attrs.z;
         texdata_t[2 * (8 * joffset + 3) + 0] = attrs.ins;
         texdata_t[2 * (8 * joffset + 3) + 1] = attrs.outs;
         // TODO segment

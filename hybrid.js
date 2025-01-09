@@ -38,6 +38,7 @@ let gsvMeta = {};
 let keyframes = [];
 let manager = new Manager();
 let plyTexData = new Uint32Array();
+let playing = false;
 
 async function main() {
   let carousel = false;
@@ -70,7 +71,8 @@ async function main() {
 
   // Enable blending
   gl.enable(gl.BLEND);
-  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ONE_MINUS_DST_ALPHA, gl.ONE);
+  // gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); // error
+  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ONE_MINUS_DST_ALPHA, gl.ONE); // correct
   gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
 
   const u_projection = gl.getUniformLocation(program, "projection");
@@ -79,8 +81,13 @@ async function main() {
   const u_view = gl.getUniformLocation(program, "view");
   const u_timestamp = gl.getUniformLocation(program, "timestamp");
   const u_resolution = gl.getUniformLocation(program, "resolution");
-  const u_dynamics = gl.getUniformLocation(program, "dynamics");
   const u_offsetBorder = gl.getUniformLocation(program, "offset_border");
+  const u_gop = gl.getUniformLocation(program, "gop");
+  const u_overlap = gl.getUniformLocation(program, "overlap");
+  const u_duration = gl.getUniformLocation(program, "duration");
+  const u_dynamics = gl.getUniformLocation(program, "dynamics");
+  // for overlap
+  const u_oldynamics = gl.getUniformLocation(program, "oldynamics");
 
   // positions
   const triangleVertices = new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]);
@@ -98,6 +105,9 @@ async function main() {
   var highxyzTexture = gl.createTexture();
   var lowxyzTexture = gl.createTexture();
   var rotTexture = gl.createTexture();
+  var olhighxyzTexture = gl.createTexture();
+  var ollowxyzTexture = gl.createTexture();
+  var olrotTexture = gl.createTexture();
   // gl.bindTexture(gl.TEXTURE_2D, atlastexture);
 
   var gs_textureLocation = gl.getUniformLocation(program, "gs_texture");
@@ -110,6 +120,13 @@ async function main() {
   gl.uniform1i(lowxyz_textureLocation, 3);
   var rot_textureLocation = gl.getUniformLocation(program, "rot_texture");
   gl.uniform1i(rot_textureLocation, 4);
+  // for overlap
+  var olhighxyz_textureLocation = gl.getUniformLocation(program, "olhighxyz_texture");
+  gl.uniform1i(olhighxyz_textureLocation, 5);
+  var ollowxyz_textureLocation = gl.getUniformLocation(program, "ollowxyz_texture");
+  gl.uniform1i(ollowxyz_textureLocation, 6);
+  var olrot_textureLocation = gl.getUniformLocation(program, "olrot_texture");
+  gl.uniform1i(olrot_textureLocation, 7);
 
   const indexBuffer = gl.createBuffer();
   const a_index = gl.getAttribLocation(program, "index");
@@ -304,12 +321,7 @@ async function main() {
     down = e.ctrlKey || e.metaKey ? 2 : 1;
   });
   canvas.addEventListener("contextmenu", (e) => {
-    // console.log("contextmenu?");
-    // carousel = false;
     e.preventDefault();
-    // startX = e.clientX;
-    // startY = e.clientY;
-    // down = 2;
   });
 
   canvas.addEventListener("mousemove", (e) => {
@@ -446,7 +458,6 @@ async function main() {
   let avgFps = 0;
   let start = 0;
   let targetFPSInterval = 1000 / 30;
-  let currentCb;
 
   const frame = (now) => {
     let inv = invert4(viewMatrix);
@@ -530,14 +541,16 @@ async function main() {
     if (vertexCount > 0) {
       var elapsed = now - lastFrame;
       // update the frame
-      if (elapsed > targetFPSInterval) {
-        lastFrame = now - (elapsed % (targetFPSInterval));
-        if (manager.canPlay) {
+      if (manager.canPlay) {
+        gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+        if (elapsed > targetFPSInterval) {
+          lastFrame = now - (elapsed % (targetFPSInterval));
           // control fps
-          manager.currentFrame = (manager.currentFrame + 1) % gsvMeta.duration;
-          currentCb = manager.getFromCurrentFrame(FTYPES.cb);
-          gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+          // manager.currentFrame = ((manager.currentFrame + 1) % 30) + 30;
+          manager.currentFrame = playing ? (manager.currentFrame + 1) % gsvMeta.duration : manager.currentFrame;
+          document.getElementById("ts").innerText = manager.currentFrame.toString() + ' / ' + manager.duration.toString();
           gl.uniform1ui(u_timestamp, manager.currentFrame);
+          var currentCb = manager.getFromCurrentFrame(FTYPES.cb);
           gl.uniform2iv(u_dynamics, new Int32Array([currentCb.dynamic_start, currentCb.dynamic_end]));
           // directly calculate from image resolution, so no need to divide by another 4
           setTexture(gl, highxyzTexture, manager.getFromCurrentFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 2, '8rgbui');
@@ -546,6 +559,12 @@ async function main() {
           // setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((4 * gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, '8rui');
           setTexture(gl, rotTexture, manager.getFromCurrentFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 4, '8rgbaui');
 
+          // for overlap
+          var lastCb = manager.getFromOverlapFrame(FTYPES.cb);
+          gl.uniform2iv(u_oldynamics, new Int32Array([lastCb.dynamic_start, lastCb.dynamic_end]));
+          setTexture(gl, olhighxyzTexture, manager.getFromOverlapFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 5, '8rgbui');
+          setTexture(gl, ollowxyzTexture, manager.getFromOverlapFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 6, '8rgbui');
+          setTexture(gl, olrotTexture, manager.getFromOverlapFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 7, '8rgbaui');
         } else {
           // wait for loading
         }
@@ -591,8 +610,12 @@ async function main() {
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
   targetFPSInterval = 1000 / gsvMeta.target_fps;
+  // targetFPSInterval = 1000 / 2;
   gl.uniform1i(u_offsetBorder, gsvMeta.offset_position_border);
   gl.uniform1i(u_resolution, gsvMeta.image[0]);
+  gl.uniform1ui(u_gop, gsvMeta.GOP);
+  gl.uniform1ui(u_overlap, gsvMeta.overlap);
+  gl.uniform1ui(u_duration, gsvMeta.duration);
 
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
@@ -600,7 +623,7 @@ async function main() {
   for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
     keyframes.push(padZeroStart(index.toString()));
   }
-  manager.setMetaInfo(keyframes.length, gsvMeta.GOP, gsvMeta.duration, gsvMeta.target_fps);
+  manager.setMetaInfo(keyframes.length, gsvMeta.GOP, gsvMeta.overlap, gsvMeta.duration, gsvMeta.target_fps);
 
 
   // video and canvas setting
@@ -638,6 +661,23 @@ async function main() {
   cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
   await manager.blockUntilCanplay();
+
+  playing = true;
+  var button = document.getElementById("playPauseButton");
+  button.style.display = 'block';
+  button.addEventListener('click', () => {
+    var icon = button.querySelector("i");
+    if (playing) {
+      playing = false;
+      icon.classList.remove("fa-pause");
+      icon.classList.add("fa-play");
+    } else {
+      playing = true;
+      icon.classList.remove("fa-play");
+      icon.classList.add("fa-pause");
+    }
+  }
+  );
 
 }
 

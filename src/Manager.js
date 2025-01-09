@@ -7,6 +7,7 @@ export class Manager {
         this.jsonDecoder = new TextDecoder();
         this.totalGroups = 0;
         this.GOP = 30;
+        this.overlap = 5;
         this.duration = 300;
         this.fps = 30;
         this.highxyzBuffer = {};
@@ -31,9 +32,8 @@ export class Manager {
 
     // update the prompt in the middle
     updatePrompt(hint) {
-        document.getElementById("message").innerText = hint;
         var oldone = document.getElementById("message").innerText;
-        if (oldone.startsWith(hint) && oldone.length == 10) {
+        if (oldone.startsWith(hint) && oldone.length < 24) {
             oldone = oldone + ".";
         } else {
             oldone = hint;
@@ -42,11 +42,14 @@ export class Manager {
     }
 
     async blockUntilAllReady() {
+        document.getElementById("message").innerText = 'loading wasm';
         while (!this.drcDecoderInit) {
             await sleep(300);
             this.updatePrompt('loading wasm');
         }
         document.getElementById("message").innerText = 'DRC decoder ready';
+        await sleep(500);
+        document.getElementById("message").innerText = 'loading opencv';
         while (!this.videoExtracterInit) {
             await sleep(300);
             this.updatePrompt('loading opencv');
@@ -66,6 +69,29 @@ export class Manager {
                 return this.lowxyzBuffer[currentGroup][this.currentFrame % this.GOP];
             case FTYPES.rot:
                 return this.rotBuffer[currentGroup][this.currentFrame % this.GOP];
+            default:
+                break;
+        }
+    }
+
+    // retrieve the data according to currentFrame for overlap
+    getFromOverlapFrame(type) {
+        const groupIdx = Math.floor(this.currentFrame / this.GOP);
+        // no overlap
+        if (this.currentFrame >= groupIdx * this.GOP + this.overlap) {
+            return this.getFromCurrentFrame(type);
+        }
+        // there is overlap
+        var lastGroup = padZeroStart((groupIdx == 0 ? 0 : groupIdx - 1) * this.GOP);
+        switch (type) {
+            case FTYPES.cb:
+                return this.cbBuffer[lastGroup];
+            case FTYPES.highxyz:
+                return this.highxyzBuffer[lastGroup][this.currentFrame - (groupIdx == 0 ? 0 : groupIdx - 1) * this.GOP];
+            case FTYPES.lowxyz:
+                return this.lowxyzBuffer[lastGroup][this.currentFrame - (groupIdx == 0 ? 0 : groupIdx - 1) * this.GOP];
+            case FTYPES.rot:
+                return this.rotBuffer[lastGroup][this.currentFrame - (groupIdx == 0 ? 0 : groupIdx - 1) * this.GOP];
             default:
                 break;
         }
@@ -145,9 +171,10 @@ export class Manager {
         this.videoExtracterInit = true;
     }
 
-    setMetaInfo(totalGroups, GOP, duration, target_fps) {
+    setMetaInfo(totalGroups, GOP, overlap, duration, target_fps) {
         this.totalGroups = totalGroups;
         this.GOP = GOP;
+        this.overlap = overlap;
         this.duration = duration;
         this.fps = target_fps;
         this.updateProgressHint(FTYPES.ply);

@@ -5,17 +5,30 @@ precision highp int;
 
 uniform highp usampler2D gs_texture;
 uniform highp usampler2D atlas_texture;
+// 2, 3, 4
 uniform highp usampler2D highxyz_texture;
 uniform highp usampler2D lowxyz_texture;
 uniform highp usampler2D rot_texture;
+// for overlap 5, 6, 7
+uniform highp usampler2D olhighxyz_texture;
+uniform highp usampler2D ollowxyz_texture;
+uniform highp usampler2D olrot_texture;
+
 uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
 uniform uint timestamp;
 uniform int resolution;
 uniform int offset_border;
+// info about time, in gop, overlap, duration
+uniform uint gop;
+uniform uint overlap;
+uniform uint duration;
 // int range of dynamics
 uniform ivec2 dynamics;
+
+// for overlap
+uniform ivec2 oldynamics;
 
 in vec2 position;
 in int index;
@@ -39,20 +52,28 @@ void main () {
     uint visible_ts = cen.w & 0xffffu;
     uint invisible_ts = (cen.w >> 16u) & 0xffffu;
     vec3 cen_position = uintBitsToFloat(cen.xyz);
-    if (timestamp < visible_ts || timestamp >= invisible_ts){
+    // TODO whether to consider beginning and ending frames
+    bool is_fadeout = ((timestamp >= invisible_ts) && (timestamp < (invisible_ts + overlap)) );
+                // && (timestamp > 5u));
+    bool is_fadein = ((timestamp >= visible_ts) && (timestamp < (visible_ts + overlap)) );
+                // && (timestamp > 5u));
+
+    if ((timestamp < visible_ts) || (timestamp >= (invisible_ts + overlap))) {
+    // if (!is_fadein && !is_fadeout) {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
     bool is_dynamic = (index >= dynamics.x && index < dynamics.y);
+    bool is_oldynamic = (index >= oldynamics.x && index < oldynamics.y);
+
     // offset on rotation
     vec4 rot_offset;
+    vec4 olrot_offset;
 
     if(is_dynamic){
         // apply the offset
-        // uvec2 img_coord = texelFetch(atlas_texture, ivec2(((index - dynamics.x) & 0x3ff, (index - dynamics.x) >> 10) ), 0).rg;
-
-        // int mapped_index = index - dynamics.x;
-        // int mapped_index = int(img_coord.x) * resolution + int(img_coord.y);
+        // get the index in the pixel space from morton order
+        // morton order is (index - dynamics.x)
         uint mapped_index = texelFetch(atlas_texture, ivec2(((index - dynamics.x) & 0x3ff), (index - dynamics.x) >> 10), 0).r;
 
         // mind the order here due to cv2 uses bgr
@@ -83,6 +104,24 @@ void main () {
 
         vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
+    } else if (is_oldynamic) {
+        // apply the offset
+        uint mapped_index = texelFetch(atlas_texture, ivec2(((index - oldynamics.x) & 0x3ff), (index - oldynamics.x) >> 10), 0).r;
+
+        // mind the order here due to cv2 uses bgr
+        uvec3 highxyz = texelFetch(olhighxyz_texture, ivec2((mapped_index & 0x3ffu), mapped_index >> 10), 0).rgb;
+        uvec3 lowxyz = texelFetch(ollowxyz_texture, ivec2((mapped_index & 0x3ffu), mapped_index >> 10), 0).rgb;
+
+
+        uvec4 rot_bq = texelFetch(olrot_texture, ivec2(mapped_index & 0x3ffu, mapped_index >> 10), 0);
+        olrot_offset = vec4(float(rot_bq.x) / 127.5 - 1.0,
+                            float(rot_bq.y) / 127.5 - 1.0,
+                            float(rot_bq.z) / 127.5 - 1.0,
+                            float(rot_bq.w) / 127.5 - 1.0);
+        olrot_offset /= sqrt(dot(rot_offset, rot_offset));
+
+        vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
+        cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
     } 
 
     vec4 cam = view * vec4(cen_position, 1);
@@ -105,6 +144,8 @@ void main () {
     rot /= sqrt(dot(rot, rot));
     if(is_dynamic){
         rot = quanternion_multiply(rot, rot_offset);
+    } else if (is_oldynamic) {
+        rot = quanternion_multiply(rot, olrot_offset);
     }
 
     mat3 S = mat3(scale.x, 0.0, 0.0, 0.0, scale.y, 0.0, 0.0, 0.0, scale.z);
@@ -139,6 +180,24 @@ void main () {
 
     //                                                          r                      g                      b                     a 
     vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
+    float fade_factor = float(timestamp - visible_ts) / float(overlap + 1u);
+    // if(is_fadein && is_fadeout){
+    //     vColor.rgb = vec3(1.0, 0.0, 0.0);
+    // }
+    // TODO fadeout flashes
+    // if (is_fadein) {
+    //     // vColor.a = vColor.a * 1.;
+    //     // vColor.rgb = vec3(1.0, 0.0, 0.0);
+    //     vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * fade_factor;
+    //     // vColor.a = 0.5;
+    // } 
+    // if (is_fadeout) {
+    //     // vColor.a = vColor.a * float(invisible_ts + overlap - timestamp + 1u) / float(overlap + 1u);
+    //     // vColor.a = 0.5;
+    //     // vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * float(invisible_ts + overlap - timestamp + 1u) / float(overlap + 1u);
+    //     // vColor.rgb = vec3(1.0, 0.0, 0.0);
+    //     vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * 0.8;
+    // }
     vPosition = position;
 
     vec2 vCenter = vec2(pos2d) / pos2d.w;
@@ -161,7 +220,7 @@ out vec4 fragColor;
 
 void main () {
     float A = -dot(vPosition, vPosition);
-    if (A < -4.0) discard;
+    if (A < -5.0) discard;
     float B = exp(A) * vColor.a;
     fragColor = vec4(B * vColor.rgb, B);
 }
