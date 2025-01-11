@@ -28,6 +28,21 @@ export function floatToHalf(float) {
     return (sign << 15) | (newExp << 10) | (frac >> 13);
 }
 
+export function float16ToFloat32(bits) {
+    const e = (bits & 0x7C00) >> 10;
+    const m = bits & 0x03FF;
+    if (e === 0) {
+        return Math.pow(-1, (bits >> 15)) * m * Math.pow(2, -24);
+    } else if (e < 31) {
+        return Math.pow(-1, (bits >> 15)) * (m + 0x0400) * Math.pow(2, e - 25);
+    } else if (e === 31 && m === 0) {
+        return Math.pow(-1, (bits >> 15)) * Infinity;
+    } else {
+        return Math.pow(-1, (bits >> 15)) * (m === 0x03FF ? NaN : Number.MAX_VALUE);
+    }
+}
+
+
 // 将两个半精度浮点数打包为一个32位整数
 export function packHalf2x16(x, y) {
     return (floatToHalf(x) | (floatToHalf(y) << 16)) >>> 0;

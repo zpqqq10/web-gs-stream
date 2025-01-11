@@ -20,6 +20,8 @@ uniform vec2 viewport;
 uniform uint timestamp;
 uniform int resolution;
 uniform int offset_border;
+// camera center
+uniform vec3 camera_center;
 // info about time, in gop, overlap, duration
 uniform uint gop;
 uniform uint overlap;
@@ -122,6 +124,7 @@ void main () {
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
     } 
 
+    // coordinate in camera space
     vec4 cam = view * vec4(cen_position, 1);
     vec4 pos2d = projection * cam;
     float clip = 1.2 * pos2d.w;
@@ -132,6 +135,9 @@ void main () {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
+
+    // direction for sh calculation
+    vec3 shdir = camera_center - cen_position;
     
     uvec4 cov = texelFetch(gs_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
     vec3 scale = vec3(unpackHalf2x16(cov.x).xy, unpackHalf2x16(cov.y).x);
@@ -203,8 +209,8 @@ out vec4 fragColor;
 
 void main () {
     float A = -dot(vPosition, vPosition);
-    if (A < -5.0) discard;
     float B = exp(A) * vColor.a;
+    if (B < 1. / 255.) discard;
     fragColor = vec4(B * vColor.rgb, B);
 }
 

@@ -8,24 +8,31 @@ class CBDownloader {
         // postMessage({ msg: 'ready' });
     }
 
-    async reload(baseUrl, keyframe) {
+    async download(baseUrl, keyframe) {
         if (!this.initialized) {
             throw new Error('video downloader not initialized');
         }
         if (keyframe == -1){
             // process the init codebook
-            const req = await fetch(new URL('init_codebooks.json', baseUrl));
-            if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+            const jsonPromise = fetch(new URL('init_codebooks.json', baseUrl));
+            const cbPromise = fetch(new URL('init_codebooks.bin', baseUrl));
+            const [jsonReq, cbReq] = await Promise.all([jsonPromise, cbPromise]);
+            if (jsonReq.status != 200) throw new Error(jsonReq.status + " Unable to load " + jsonReq.url);
+            if (cbReq.status != 200) throw new Error(jsonReq.status + " Unable to load " + jsonReq.url);
             // pass arraybuffer rather than json, to avoid copying                                                      
-            const codebooks = await req.arrayBuffer();
-            postMessage({ data: codebooks, keyframe: keyframe, type: FTYPES.cb }, [codebooks]);
+            const cbJson = await jsonReq.arrayBuffer();
+            const cbData = await cbReq.arrayBuffer();
+            postMessage({ cbjson: cbJson, data: cbData, keyframe: keyframe, type: FTYPES.cb }, [cbJson, cbData]);
         } else {
-            const req = await fetch(new URL(keyframe + '/codebooks.json', baseUrl));
-            if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
+            const jsonPromise = fetch(new URL(keyframe + '/codebooks.json', baseUrl));
+            const cbPromise = fetch(new URL(keyframe + '/codebooks.bin', baseUrl));
+            const [jsonReq, cbReq] = await Promise.all([jsonPromise, cbPromise]);
+            if (jsonReq.status != 200) throw new Error(jsonReq.status + " Unable to load " + jsonReq.url);
+            if (cbReq.status != 200) throw new Error(jsonReq.status + " Unable to load " + jsonReq.url);
             // pass arraybuffer rather than json, to avoid copying                                                      
-            const codebooks = await req.arrayBuffer();
-            // TODO 这里要查一下 很可能会有性能问题
-            postMessage({ data: codebooks, keyframe: keyframe, type: FTYPES.cb }, [codebooks]);
+            const cbJson = await jsonReq.arrayBuffer();
+            const cbData = await cbReq.arrayBuffer();
+            postMessage({ cbjson: cbJson, data: cbData, keyframe: keyframe, type: FTYPES.cb }, [cbJson, cbData]);
         }
     }
 
@@ -36,7 +43,7 @@ class CBDownloader {
 
 onmessage = (e) => {
     if (e.data.baseUrl) {
-        cbDownloader.reload(e.data.baseUrl, e.data.keyframe);
+        cbDownloader.download(e.data.baseUrl, e.data.keyframe);
     } else if (e.data.msg && e.data.msg === 'init') {
         cbDownloader = new CBDownloader();
     } else if (e.data.msg && e.data.msg === 'finish') {

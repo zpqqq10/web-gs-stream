@@ -1,5 +1,5 @@
 import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSVSahders.js";
-import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4 } from "./src/utils/mathUtils.js";
+import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4, float16ToFloat32 } from "./src/utils/mathUtils.js";
 import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture } from "./src/utils/utils.js";
 import { Manager } from "./src/Manager.js";
 
@@ -82,6 +82,7 @@ async function main() {
   const u_timestamp = gl.getUniformLocation(program, "timestamp");
   const u_resolution = gl.getUniformLocation(program, "resolution");
   const u_offsetBorder = gl.getUniformLocation(program, "offset_border");
+  const u_cameraCenter = gl.getUniformLocation(program, "camera_center");
   const u_gop = gl.getUniformLocation(program, "gop");
   const u_overlap = gl.getUniformLocation(program, "overlap");
   const u_duration = gl.getUniformLocation(program, "duration");
@@ -191,7 +192,7 @@ async function main() {
         while (vertexCount == 0 || !manager.cbBuffer[keyframe] || !plyTexData) {
           await sleep(100);
         }
-        toolWorker.postMessage({ ply: data, extent: manager.cbBuffer[keyframe].extent, total: -1, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
+        toolWorker.postMessage({ ply: data, extent: manager.initCb.extent, total: -1, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
       }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
@@ -232,12 +233,12 @@ async function main() {
     if (e.data.msg && e.data.msg == 'ready') {
       // do nothing
     } else if (e.data.type && e.data.type == FTYPES.cb) {
-      const { data, keyframe, type } = e.data;
+      const { cbjson, data, keyframe, type } = e.data;
       if (keyframe == -1) {
         // process the initial codebook
-        manager.setInitCb(data);
+        manager.setInitCb(cbjson);
       } else {
-        manager.appendOneBuffer(data, keyframe, type);
+        manager.appendOneBuffer(cbjson, keyframe, type);
         // load next group
         let nextIdx = manager.getNextIndex(type);
         if (nextIdx < 0) {
@@ -530,6 +531,7 @@ async function main() {
     inv2 = translate4(inv2, 0, -jumpDelta, 0);
     inv2 = rotate4(inv2, -0.1 * jumpDelta, 1, 0, 0);
     let actualViewMatrix = invert4(inv2);
+    gl.uniform3fv(u_cameraCenter, new Float32Array([inv2[12], inv2[13], inv2[14]]));
 
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
     toolWorker.postMessage({ view: viewProj });
