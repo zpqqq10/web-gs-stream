@@ -546,7 +546,6 @@ async function main() {
         if (elapsed > targetFPSInterval) {
           lastFrame = now - (elapsed % (targetFPSInterval));
           // control fps
-          // manager.currentFrame = ((manager.currentFrame + 1) % 30) + 30;
           manager.currentFrame = playing ? (manager.currentFrame + 1) % gsvMeta.duration : manager.currentFrame;
           document.getElementById("ts").innerText = manager.currentFrame.toString() + ' / ' + manager.duration.toString();
           gl.uniform1ui(u_timestamp, manager.currentFrame);
@@ -624,18 +623,6 @@ async function main() {
     keyframes.push(padZeroStart(index.toString()));
   }
   manager.setMetaInfo(keyframes.length, gsvMeta.GOP, gsvMeta.overlap, gsvMeta.duration, gsvMeta.target_fps);
-
-
-  // video and canvas setting
-  const highxyzCanvas = document.getElementById('highxyzCanvas');
-  highxyzCanvas.width = gsvMeta.image[0];
-  highxyzCanvas.height = gsvMeta.image[0]
-  const lowxyzCanvas = document.getElementById('lowxyzCanvas');
-  lowxyzCanvas.width = gsvMeta.image[0];
-  lowxyzCanvas.height = gsvMeta.image[0]
-  const rotCanvas = document.getElementById('rotCanvas');
-  rotCanvas.width = gsvMeta.image[0];
-  rotCanvas.height = gsvMeta.image[0]
 
   const [cameraReq, atlasReq] = await Promise.all([cameraPromise, atlasPromise]);
   if (cameraReq.status != 200) throw new Error(cameraReq.status + " Unable to load " + cameraReq.url);

@@ -52,14 +52,12 @@ void main () {
     uint visible_ts = cen.w & 0xffffu;
     uint invisible_ts = (cen.w >> 16u) & 0xffffu;
     vec3 cen_position = uintBitsToFloat(cen.xyz);
-    // TODO whether to consider beginning and ending frames
-    bool is_fadeout = ((timestamp >= invisible_ts) && (timestamp < (invisible_ts + overlap)) );
-                // && (timestamp > 5u));
-    bool is_fadein = ((timestamp >= visible_ts) && (timestamp < (visible_ts + overlap)) );
-                // && (timestamp > 5u));
+    bool is_fadeout = ((timestamp >= invisible_ts) && (timestamp < (invisible_ts + overlap))
+                && (timestamp > 5u) && (duration - timestamp > overlap)); ;
+    bool is_fadein = ((timestamp >= visible_ts) && (timestamp < (visible_ts + overlap)) 
+                && (timestamp > 5u));
 
     if ((timestamp < visible_ts) || (timestamp >= (invisible_ts + overlap))) {
-    // if (!is_fadein && !is_fadeout) {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
@@ -118,7 +116,7 @@ void main () {
                             float(rot_bq.y) / 127.5 - 1.0,
                             float(rot_bq.z) / 127.5 - 1.0,
                             float(rot_bq.w) / 127.5 - 1.0);
-        olrot_offset /= sqrt(dot(rot_offset, rot_offset));
+        olrot_offset /= sqrt(dot(olrot_offset, olrot_offset));
 
         vec3 xyz_offset = vec3(uvec3(highxyz << 8u) | lowxyz) / 65535.;
         cen_position = cen_position + xyz_offset * float(offset_border) * 2. - float(offset_border); 
@@ -180,24 +178,9 @@ void main () {
 
     //                                                          r                      g                      b                     a 
     vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
-    float fade_factor = float(timestamp - visible_ts) / float(overlap + 1u);
-    // if(is_fadein && is_fadeout){
-    //     vColor.rgb = vec3(1.0, 0.0, 0.0);
-    // }
-    // TODO fadeout flashes
-    // if (is_fadein) {
-    //     // vColor.a = vColor.a * 1.;
-    //     // vColor.rgb = vec3(1.0, 0.0, 0.0);
-    //     vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * fade_factor;
-    //     // vColor.a = 0.5;
-    // } 
-    // if (is_fadeout) {
-    //     // vColor.a = vColor.a * float(invisible_ts + overlap - timestamp + 1u) / float(overlap + 1u);
-    //     // vColor.a = 0.5;
-    //     // vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * float(invisible_ts + overlap - timestamp + 1u) / float(overlap + 1u);
-    //     // vColor.rgb = vec3(1.0, 0.0, 0.0);
-    //     vColor.a = float((cov.w >> 24) & 0xffu) / 255.0 * 0.8;
-    // }
+    vColor.a = is_fadein ? vColor.a * float(timestamp - visible_ts + 1u) / float(overlap + 1u)
+                    : (is_fadeout ? vColor.a * float(invisible_ts + overlap - timestamp) / float(overlap + 1u) 
+                        : vColor.a);
     vPosition = position;
 
     vec2 vCenter = vec2(pos2d) / pos2d.w;
