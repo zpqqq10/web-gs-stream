@@ -41,6 +41,7 @@ out vec4 vColor;
 out vec2 vPosition;
 
 // sh coefficients
+float PISQRT = 1.77245385091f;
 float SH_C0 = 0.28209479177387814f;
 float SH_C1 = 0.4886025119029199f;
 float SH_C2[] = float[](
@@ -70,10 +71,41 @@ vec4 quanternion_multiply(vec4 a, vec4 b) {
 }
 
 vec3 computeSH(uint rest_idx, vec3 gs_position, vec3 direct_color){
+    vec3 sh[15];
     // direction for sh calculation
     vec3 shdir = gs_position - camera_center;
     shdir = normalize(shdir);
-    return direct_color;
+    float x = shdir.x, y = shdir.y, z = shdir.z;
+    float xx = x * x, yy = y * y, zz = z * z;
+    float xy = x * y, yz = y * z, zx = z * x;
+    // fetch the sh coefficients
+    uvec3 packed_sh = texelFetch(sh_texture, ivec2(((rest_idx & 0x3ffu) << 3u) | 7u, rest_idx >> 10u), 0).rgb;
+    sh[14] = vec3(unpackHalf2x16(packed_sh.x).xy, unpackHalf2x16(packed_sh.y).x);
+    for (uint i = 0u; i < 7u; i++){
+        packed_sh = texelFetch(sh_texture, ivec2(((rest_idx & 0x3ffu) << 3u) | i, rest_idx >> 10u), 0).rgb;
+        sh[i * 2u + 0u] = vec3(unpackHalf2x16(packed_sh.x).xy, unpackHalf2x16(packed_sh.y).x);
+        sh[i * 2u + 1u] = vec3(unpackHalf2x16(packed_sh.y).y, unpackHalf2x16(packed_sh.z).xy);
+    }
+    
+    vec3 result = SH_C0 * direct_color;
+    result = result - SH_C1 * y * sh[0] + SH_C1 * z * sh[1] - SH_C1 * x * sh[2];
+    result = result +
+				SH_C2[0] * xy * sh[3] +
+				SH_C2[1] * yz * sh[4] +
+				SH_C2[2] * (2.0f * zz - xx - yy) * sh[5] +
+				SH_C2[3] * zx * sh[6] +
+				SH_C2[4] * (xx - yy) * sh[7];
+    result = result +
+                SH_C3[0] * y * (3.0f * xx - yy) * sh[8] +
+                SH_C3[1] * xy * z * sh[9] +
+                SH_C3[2] * y * (4.0f * zz - xx - yy) * sh[10] +
+                SH_C3[3] * z * (2.0f * zz - 3.0f * xx - 3.0f * yy) * sh[11] +
+                SH_C3[4] * x * (4.0f * zz - xx - yy) * sh[12] +
+                SH_C3[5] * z * (xx - yy) * sh[13] +
+                SH_C3[6] * x * (xx - 3.0f * yy) * sh[14];
+	result += 0.5;
+    result = clamp(result, 0.0, 1.0);
+    return result;
 }
 
 void main () {
@@ -210,9 +242,13 @@ void main () {
     vec2 majorAxis = min(sqrt(2.0 * lambda1), 1024.0) * diagonalVector;
     vec2 minorAxis = min(sqrt(2.0 * lambda2), 1024.0) * vec2(diagonalVector.y, -diagonalVector.x);
 
-    //                                                          r                      g                      b                     a 
-    vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.y) & 0xffu, (cov.y >> 8) & 0xffu, (cov.y >> 16) & 0xffu, (cov.y >> 24) & 0xffu) / 255.0;
+    vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * 
+        //          r                      g                      b                     a 
+        vec4((cov.y) & 0xffu, (cov.y >> 8) & 0xffu, (cov.y >> 16) & 0xffu, (cov.y >> 24) & 0xffu) / 255.0;
+    vColor.rgb = PISQRT * 2. *vColor.rgb - PISQRT;
     uint sh_idx = cov.z;
+    // vColor.rgb = SH_C0 * vColor.rgb + .5;
+    vColor.rgb = computeSH(sh_idx, cen_position, vColor.rgb);
     vColor.a = is_fadein ? vColor.a * float(timestamp - visible_ts + 1u) / float(overlap + 1u)
                     : (is_fadeout ? vColor.a * float(invisible_ts + overlap - timestamp) / float(overlap + 1u) 
                         : vColor.a);

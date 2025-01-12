@@ -624,7 +624,6 @@ async function main() {
 
 
   // main work here
-  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://10.76.1.68:8080/fragmented/h264/stepin/';
   // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepin/';
   const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/flame_salmon_40s/';
 

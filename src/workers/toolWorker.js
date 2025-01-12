@@ -193,7 +193,6 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
         texdata_c[4 * (9 * joffset + 7) + 0] = attrs.f_dc_0;
         texdata_c[4 * (9 * joffset + 7) + 1] = attrs.f_dc_1;
         texdata_c[4 * (9 * joffset + 7) + 2] = attrs.f_dc_2;
-        // TODO activate here?
         texdata_c[4 * (9 * joffset + 7) + 3] = attrs.opacity;
         texdata[9 * joffset + 8] = attrs.rest_idx + cbOffset;
 
@@ -225,28 +224,28 @@ function processCodebook(inputBuffer, groupIdx, cbtexdata) {
     console.time("build cb texture");
     for (let j = 0; j < count; j++) {
         var joffset = j + begin_offset;
-        cbtexdata[24 * joffset + 0] = (ubuf[45 * j + 0] | ubuf[45 * j + 1]) >>> 0;
-        cbtexdata[24 * joffset + 1] = (ubuf[45 * j + 2] | ubuf[45 * j + 3]) >>> 0;
-        cbtexdata[24 * joffset + 2] = (ubuf[45 * j + 4] | ubuf[45 * j + 5]) >>> 0;
-        cbtexdata[24 * joffset + 3] = (ubuf[45 * j + 6] | ubuf[45 * j + 7]) >>> 0;
-        cbtexdata[24 * joffset + 4] = (ubuf[45 * j + 8] | ubuf[45 * j + 9]) >>> 0;
-        cbtexdata[24 * joffset + 5] = (ubuf[45 * j + 10] | ubuf[45 * j + 11]) >>> 0;
-        cbtexdata[24 * joffset + 6] = (ubuf[45 * j + 12] | ubuf[45 * j + 13]) >>> 0;
-        cbtexdata[24 * joffset + 7] = (ubuf[45 * j + 14] | ubuf[45 * j + 15]) >>> 0;
-        cbtexdata[24 * joffset + 8] = (ubuf[45 * j + 16] | ubuf[45 * j + 17]) >>> 0;
-        cbtexdata[24 * joffset + 9] = (ubuf[45 * j + 18] | ubuf[45 * j + 19]) >>> 0;
-        cbtexdata[24 * joffset + 10] = (ubuf[45 * j + 20] | ubuf[45 * j + 21]) >>> 0;
-        cbtexdata[24 * joffset + 11] = (ubuf[45 * j + 22] | ubuf[45 * j + 23]) >>> 0;
-        cbtexdata[24 * joffset + 12] = (ubuf[45 * j + 24] | ubuf[45 * j + 25]) >>> 0;
-        cbtexdata[24 * joffset + 13] = (ubuf[45 * j + 26] | ubuf[45 * j + 27]) >>> 0;
-        cbtexdata[24 * joffset + 14] = (ubuf[45 * j + 28] | ubuf[45 * j + 29]) >>> 0;
-        cbtexdata[24 * joffset + 15] = (ubuf[45 * j + 30] | ubuf[45 * j + 31]) >>> 0;
-        cbtexdata[24 * joffset + 16] = (ubuf[45 * j + 32] | ubuf[45 * j + 33]) >>> 0;
-        cbtexdata[24 * joffset + 17] = (ubuf[45 * j + 34] | ubuf[45 * j + 35]) >>> 0;
-        cbtexdata[24 * joffset + 18] = (ubuf[45 * j + 36] | ubuf[45 * j + 37]) >>> 0;
-        cbtexdata[24 * joffset + 19] = (ubuf[45 * j + 38] | ubuf[45 * j + 39]) >>> 0;
-        cbtexdata[24 * joffset + 20] = (ubuf[45 * j + 40] | ubuf[45 * j + 41]) >>> 0;
-        cbtexdata[24 * joffset + 21] = (ubuf[45 * j + 42] | ubuf[45 * j + 43]) >>> 0;
+        cbtexdata[24 * joffset + 0] = (ubuf[45 * j + 0] | (ubuf[45 * j + 1] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 1] = (ubuf[45 * j + 2] | (ubuf[45 * j + 3] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 2] = (ubuf[45 * j + 4] | (ubuf[45 * j + 5] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 3] = (ubuf[45 * j + 6] | (ubuf[45 * j + 7] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 4] = (ubuf[45 * j + 8] | (ubuf[45 * j + 9] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 5] = (ubuf[45 * j + 10] | (ubuf[45 * j + 11] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 6] = (ubuf[45 * j + 12] | (ubuf[45 * j + 13] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 7] = (ubuf[45 * j + 14] | (ubuf[45 * j + 15] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 8] = (ubuf[45 * j + 16] | (ubuf[45 * j + 17] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 9] = (ubuf[45 * j + 18] | (ubuf[45 * j + 19] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 10] = (ubuf[45 * j + 20] | (ubuf[45 * j + 21] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 11] = (ubuf[45 * j + 22] | (ubuf[45 * j + 23] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 12] = (ubuf[45 * j + 24] | (ubuf[45 * j + 25] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 13] = (ubuf[45 * j + 26] | (ubuf[45 * j + 27] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 14] = (ubuf[45 * j + 28] | (ubuf[45 * j + 29] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 15] = (ubuf[45 * j + 30] | (ubuf[45 * j + 31] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 16] = (ubuf[45 * j + 32] | (ubuf[45 * j + 33] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 17] = (ubuf[45 * j + 34] | (ubuf[45 * j + 35] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 18] = (ubuf[45 * j + 36] | (ubuf[45 * j + 37] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 19] = (ubuf[45 * j + 38] | (ubuf[45 * j + 39] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 20] = (ubuf[45 * j + 40] | (ubuf[45 * j + 41] << 16)) >>> 0;
+        cbtexdata[24 * joffset + 21] = (ubuf[45 * j + 42] | (ubuf[45 * j + 43] << 16)) >>> 0;
         cbtexdata[24 * joffset + 22] = (ubuf[45 * j + 44] | 0) >>> 0;
         // leave 1.5 32-bit for future use
 
