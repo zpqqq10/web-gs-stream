@@ -22,6 +22,7 @@ uniform vec2 viewport;
 uniform uint timestamp;
 uniform int resolution;
 uniform int offset_border;
+uniform float extent;
 // camera center
 uniform vec3 camera_center;
 // info about time, in gop, overlap, duration
@@ -198,7 +199,9 @@ void main () {
         return;
     }
     
-    vec3 scale = vec3(unpackHalf2x16(t_s.y).xy, unpackHalf2x16(t_s.z).x);
+    // if scales are calculated outside
+    // vec3 scale = vec3(unpackHalf2x16(t_s.y).xy, unpackHalf2x16(t_s.z).x);
+    vec3 scale = vec3(t_s.y & 0xffffu, (t_s.y >> 16u) & 0xffffu, t_s.z & 0xffffu) / 4095.0 * extent;
     // rotation, rgba & rest_idx
     uvec3 cov = texelFetch(gs_texture, ivec2((index & 0x3ff) * 3 + 2, index >> 10), 0).rgb;
     vec4 rot = vec4(float((cov.x      ) & 0xffu) / 127.5 - 1.0, 

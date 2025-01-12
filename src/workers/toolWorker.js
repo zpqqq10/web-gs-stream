@@ -155,10 +155,10 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
         texdata_t[2 * (9 * joffset + 3) + 0] = attrs.ins;
         texdata_t[2 * (9 * joffset + 3) + 1] = attrs.outs;
 
-        let scale = [
-            (attrs.scale_0 / 4095) * extent,
-            (attrs.scale_1 / 4095) * extent,
-            (attrs.scale_2 / 4905) * extent];
+        // let scale = [
+        //     (attrs.scale_0 / 4095) * extent,
+        //     (attrs.scale_1 / 4095) * extent,
+        //     (attrs.scale_2 / 4905) * extent];
 
         // for vanilla 3dgs
         // const qlen = Math.sqrt(
@@ -179,8 +179,10 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
         // ];
 
         // scale
-        texdata[9 * joffset + 4] = packHalf2x16(scale[0], scale[1]);
-        texdata[9 * joffset + 5] = packHalf2x16(scale[2], 0);
+        // texdata[9 * joffset + 4] = packHalf2x16(scale[0], scale[1]);
+        // texdata[9 * joffset + 5] = packHalf2x16(scale[2], 0);
+        texdata[9 * joffset + 4] = (attrs.scale_0 | (attrs.scale_1 << 16)) >>> 0;
+        texdata[9 * joffset + 5] = (attrs.scale_2 | 0) >>> 0;
 
         // rotation
         texdata_c[4 * (9 * joffset + 6) + 0] = attrs.rot_0;

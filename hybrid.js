@@ -83,6 +83,7 @@ async function main() {
   const u_timestamp = gl.getUniformLocation(program, "timestamp");
   const u_resolution = gl.getUniformLocation(program, "resolution");
   const u_offsetBorder = gl.getUniformLocation(program, "offset_border");
+  const u_extent = gl.getUniformLocation(program, "extent");
   const u_cameraCenter = gl.getUniformLocation(program, "camera_center");
   const u_gop = gl.getUniformLocation(program, "gop");
   const u_overlap = gl.getUniformLocation(program, "overlap");
@@ -262,6 +263,7 @@ async function main() {
         // process the initial codebook
         toolWorker.postMessage({ cb: data, total: totalCBIndex, groupIdx: -1, tex: cbTexData }, [data, cbTexData.buffer]);
         manager.setInitCb(cbjson);
+        gl.uniform1f(u_extent, manager.initCb.extent);
       } else {
         manager.appendOneBuffer(cbjson, keyframe, type);
         const groupIdx = parseInt(keyframe) / gsvMeta.GOP;
