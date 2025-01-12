@@ -9,9 +9,13 @@ let lastVertexCount = 0;
 
 // we only need one texdata here
 let positions;
+// total number of gaussians
 let total;
+// total number of codebook indices
+let totalCB;
+let sortRunning;
 
-// 运行排序算法
+// sort the gaussians according to depth
 function runSort(viewProj) {
     if (!positions) return;
     // const f_buffer = new Float32Array(buffer);
@@ -67,11 +71,10 @@ const throttledSort = () => {
     }
 };
 
-let sortRunning;
-
-// 处理PLY文件缓冲区
-function processPlyBuffer(inputBuffer, extent, texdata) {
+// process the buffer containing a ply
+function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
     const ubuf = new Uint8Array(inputBuffer);
+    const cbOffset = (groupIdx == -1) ? 0 : (2048 * groupIdx + 1024);
     // 10KB ought to be enough for a header...
     const header = new TextDecoder().decode(ubuf.slice(0, 1024 * 10));
     const header_end = "end_header\n";
@@ -122,11 +125,11 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         },
     );
 
-    var texwidth = 1024 * 2; // Set to your desired width
-    // this 2 is determined by how many 32-bit values are used below
-    var texheight = Math.ceil((2 * total) / texwidth); // Set to your desired height
+    var texwidth = 1024 * 3; // Set to your desired width
+    // this 3 is determined by how many 32-bit values are used below
+    var texheight = Math.ceil((3 * total) / texwidth); // Set to your desired height
     if (texdata.byteLength == 0) {
-        texdata = new Uint32Array(texwidth * texheight * 4); // 4 components per pixel (RGBA)
+        texdata = new Uint32Array(texwidth * texheight * 3); // 3 components per pixel (RGB)
         positions = new Float32Array(total * 3);
     }
     // compress all into 8 32-bit numbers
@@ -146,12 +149,11 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         positions[3 * joffset + 1] = attrs.y;
         positions[3 * joffset + 2] = attrs.z;
 
-        texdata_f[8 * joffset + 0] = attrs.x;
-        texdata_f[8 * joffset + 1] = attrs.y;
-        texdata_f[8 * joffset + 2] = attrs.z;
-        texdata_t[2 * (8 * joffset + 3) + 0] = attrs.ins;
-        texdata_t[2 * (8 * joffset + 3) + 1] = attrs.outs;
-        // TODO segment
+        texdata_f[9 * joffset + 0] = attrs.x;
+        texdata_f[9 * joffset + 1] = attrs.y;
+        texdata_f[9 * joffset + 2] = attrs.z;
+        texdata_t[2 * (9 * joffset + 3) + 0] = attrs.ins;
+        texdata_t[2 * (9 * joffset + 3) + 1] = attrs.outs;
 
         let scale = [
             (attrs.scale_0 / 4095) * extent,
@@ -177,22 +179,23 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
         // ];
 
         // scale
-        texdata[8 * joffset + 4] = packHalf2x16(scale[0], scale[1]);
-        texdata[8 * joffset + 5] = packHalf2x16(scale[2], 0);
+        texdata[9 * joffset + 4] = packHalf2x16(scale[0], scale[1]);
+        texdata[9 * joffset + 5] = packHalf2x16(scale[2], 0);
 
         // rotation
-        texdata_c[4 * (8 * joffset + 6) + 0] = attrs.rot_0;
-        texdata_c[4 * (8 * joffset + 6) + 1] = attrs.rot_1;
-        texdata_c[4 * (8 * joffset + 6) + 2] = attrs.rot_2;
-        texdata_c[4 * (8 * joffset + 6) + 3] = attrs.rot_3;
+        texdata_c[4 * (9 * joffset + 6) + 0] = attrs.rot_0;
+        texdata_c[4 * (9 * joffset + 6) + 1] = attrs.rot_1;
+        texdata_c[4 * (9 * joffset + 6) + 2] = attrs.rot_2;
+        texdata_c[4 * (9 * joffset + 6) + 3] = attrs.rot_3;
 
         // r, g, b, a/opacity
         // the last 32-bit are used for RGBA (4 8-bit)
-        texdata_c[4 * (8 * joffset + 7) + 0] = attrs.f_dc_0;
-        texdata_c[4 * (8 * joffset + 7) + 1] = attrs.f_dc_1;
-        texdata_c[4 * (8 * joffset + 7) + 2] = attrs.f_dc_2;
-        // TODO 这里要不要activate啊？
-        texdata_c[4 * (8 * joffset + 7) + 3] = attrs.opacity;
+        texdata_c[4 * (9 * joffset + 7) + 0] = attrs.f_dc_0;
+        texdata_c[4 * (9 * joffset + 7) + 1] = attrs.f_dc_1;
+        texdata_c[4 * (9 * joffset + 7) + 2] = attrs.f_dc_2;
+        // TODO activate here?
+        texdata_c[4 * (9 * joffset + 7) + 3] = attrs.opacity;
+        texdata[9 * joffset + 8] = attrs.rest_idx + cbOffset;
 
         // for vanilla 3dgs
         // const SH_C0 = 0.28209479177387814;
@@ -207,6 +210,51 @@ function processPlyBuffer(inputBuffer, extent, texdata) {
     return vertexCount + lastVertexCount;
 }
 
+// process the buffer containing a codebook
+function processCodebook(inputBuffer, groupIdx, cbtexdata) {
+    const ubuf = new Uint16Array(inputBuffer);
+    const count = (groupIdx == -1) ? 1024 : 2048;
+    const begin_offset = (groupIdx == -1) ? 0 : (2048 * groupIdx + 1024);
+
+    var texwidth = 1024 * 8; // Set to your desired width
+    // this 8 is determined by how many 32-bit values are used below
+    var texheight = Math.ceil((8 * totalCB) / texwidth); // Set to your desired height
+    if (cbtexdata.byteLength == 0) {
+        cbtexdata = new Uint32Array(texwidth * texheight * 3); // 3 components per pixel (RGB)
+    }
+    console.time("build cb texture");
+    for (let j = 0; j < count; j++) {
+        var joffset = j + begin_offset;
+        cbtexdata[24 * joffset + 0] = (ubuf[45 * j + 0] | ubuf[45 * j + 1]) >>> 0;
+        cbtexdata[24 * joffset + 1] = (ubuf[45 * j + 2] | ubuf[45 * j + 3]) >>> 0;
+        cbtexdata[24 * joffset + 2] = (ubuf[45 * j + 4] | ubuf[45 * j + 5]) >>> 0;
+        cbtexdata[24 * joffset + 3] = (ubuf[45 * j + 6] | ubuf[45 * j + 7]) >>> 0;
+        cbtexdata[24 * joffset + 4] = (ubuf[45 * j + 8] | ubuf[45 * j + 9]) >>> 0;
+        cbtexdata[24 * joffset + 5] = (ubuf[45 * j + 10] | ubuf[45 * j + 11]) >>> 0;
+        cbtexdata[24 * joffset + 6] = (ubuf[45 * j + 12] | ubuf[45 * j + 13]) >>> 0;
+        cbtexdata[24 * joffset + 7] = (ubuf[45 * j + 14] | ubuf[45 * j + 15]) >>> 0;
+        cbtexdata[24 * joffset + 8] = (ubuf[45 * j + 16] | ubuf[45 * j + 17]) >>> 0;
+        cbtexdata[24 * joffset + 9] = (ubuf[45 * j + 18] | ubuf[45 * j + 19]) >>> 0;
+        cbtexdata[24 * joffset + 10] = (ubuf[45 * j + 20] | ubuf[45 * j + 21]) >>> 0;
+        cbtexdata[24 * joffset + 11] = (ubuf[45 * j + 22] | ubuf[45 * j + 23]) >>> 0;
+        cbtexdata[24 * joffset + 12] = (ubuf[45 * j + 24] | ubuf[45 * j + 25]) >>> 0;
+        cbtexdata[24 * joffset + 13] = (ubuf[45 * j + 26] | ubuf[45 * j + 27]) >>> 0;
+        cbtexdata[24 * joffset + 14] = (ubuf[45 * j + 28] | ubuf[45 * j + 29]) >>> 0;
+        cbtexdata[24 * joffset + 15] = (ubuf[45 * j + 30] | ubuf[45 * j + 31]) >>> 0;
+        cbtexdata[24 * joffset + 16] = (ubuf[45 * j + 32] | ubuf[45 * j + 33]) >>> 0;
+        cbtexdata[24 * joffset + 17] = (ubuf[45 * j + 34] | ubuf[45 * j + 35]) >>> 0;
+        cbtexdata[24 * joffset + 18] = (ubuf[45 * j + 36] | ubuf[45 * j + 37]) >>> 0;
+        cbtexdata[24 * joffset + 19] = (ubuf[45 * j + 38] | ubuf[45 * j + 39]) >>> 0;
+        cbtexdata[24 * joffset + 20] = (ubuf[45 * j + 40] | ubuf[45 * j + 41]) >>> 0;
+        cbtexdata[24 * joffset + 21] = (ubuf[45 * j + 42] | ubuf[45 * j + 43]) >>> 0;
+        cbtexdata[24 * joffset + 22] = (ubuf[45 * j + 44] | 0) >>> 0;
+        // leave 1.5 32-bit for future use
+
+    }
+    console.timeEnd("build cb texture");
+    postMessage({ cbtexdata, texwidth, texheight }, [cbtexdata.buffer]);
+}
+
 onmessage = (e) => {
     if (e.data.view) {
         viewProj = e.data.view;
@@ -216,6 +264,11 @@ onmessage = (e) => {
             total = e.data.total;
         }
         // uint8array here
-        vertexCount2Date = processPlyBuffer(e.data.ply.buffer, e.data.extent, e.data.tex);
+        vertexCount2Date = processPlyBuffer(e.data.ply.buffer, e.data.extent, e.data.groupIdx, e.data.tex);
+    } else if (e.data.cb) {
+        if (e.data.total > 0) {
+            totalCB = e.data.total;
+        }
+        processCodebook(e.data.cb, e.data.groupIdx, e.data.tex);
     }
 };

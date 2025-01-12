@@ -21,7 +21,7 @@ export class Manager {
         this.highxyzLoaded = 0;
         this.lowxyzLoaded = 0;
         this.rotLoaded = 0;
-        this.cbLoaded = 0;
+        this.cbLoaded = -1;
         // whether can play
         this.initCb = null;
         this.canPlay = false;
@@ -140,10 +140,14 @@ export class Manager {
                 this.rotBuffer[key].push(new Uint8Array(buffer));
             }
         } else if (type === FTYPES.cb) {
-            const jsonData = JSON.parse(this.jsonDecoder.decode(buffer));
-            this.cbBuffer[key] = jsonData;
-            this.cbLoaded += 1;
-            this.updateProgressHint(FTYPES.cb);
+            if (buffer == null) {
+                // sh texture is set and then increment by 1
+                this.cbLoaded += 1;
+                this.updateProgressHint(FTYPES.cb);
+            } else {
+                const jsonData = JSON.parse(this.jsonDecoder.decode(buffer));
+                this.cbBuffer[key] = jsonData;
+            }
         }
     }
 
@@ -199,7 +203,7 @@ export class Manager {
             document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
                 + '/' + Math.floor(this.duration / this.fps);
         } else if (type === FTYPES.cb) {
-            document.getElementById("cbProgress").innerText = 'codebooks: ' + (this.cbLoaded * this.GOP / this.fps).toFixed(2)
+            document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
                 + '/' + Math.floor(this.duration / this.fps);;
         }
     }

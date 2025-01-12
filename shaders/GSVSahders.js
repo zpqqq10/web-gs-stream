@@ -13,6 +13,8 @@ uniform highp usampler2D rot_texture;
 uniform highp usampler2D olhighxyz_texture;
 uniform highp usampler2D ollowxyz_texture;
 uniform highp usampler2D olrot_texture;
+// high-order sh, 8
+uniform highp usampler2D sh_texture;
 
 uniform mat4 projection, view;
 uniform vec2 focal;
@@ -38,6 +40,26 @@ in int index;
 out vec4 vColor;
 out vec2 vPosition;
 
+// sh coefficients
+float SH_C0 = 0.28209479177387814f;
+float SH_C1 = 0.4886025119029199f;
+float SH_C2[] = float[](
+    1.0925484305920792f,
+    -1.0925484305920792f,
+    0.31539156525252005f,
+    -1.0925484305920792f,
+    0.5462742152960396f
+);
+float SH_C3[] = float[](
+    -0.5900435899266435f,
+    2.890611442640554f,
+    -0.4570457994644658f,
+    0.3731763325901154f,
+    -0.4570457994644658f,
+    1.445305721320277f,
+    -0.5900435899266435f
+);
+
 // w at first and then xyz
 vec4 quanternion_multiply(vec4 a, vec4 b) {
     vec4 res = vec4(
@@ -47,13 +69,21 @@ vec4 quanternion_multiply(vec4 a, vec4 b) {
     return res / sqrt(dot(res, res));
 }
 
+vec3 computeSH(uint rest_idx, vec3 gs_position, vec3 direct_color){
+    // direction for sh calculation
+    vec3 shdir = gs_position - camera_center;
+    shdir = normalize(shdir);
+    return direct_color;
+}
 
 void main () {
     // xyz center
-    uvec4 cen = texelFetch(gs_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
-    uint visible_ts = cen.w & 0xffffu;
-    uint invisible_ts = (cen.w >> 16u) & 0xffffu;
-    vec3 cen_position = uintBitsToFloat(cen.xyz);
+    uvec3 cen = texelFetch(gs_texture, ivec2((index & 0x3ff) * 3 + 0, index >> 10), 0).rgb;
+    vec3 cen_position = uintBitsToFloat(cen);
+    // timestamp and scale
+    uvec3 t_s = texelFetch(gs_texture, ivec2((index & 0x3ff) * 3 + 1, index >> 10), 0).rgb;
+    uint visible_ts = t_s.x & 0xffffu;
+    uint invisible_ts = (t_s.x >> 16u) & 0xffffu;
     bool is_fadeout = ((timestamp >= invisible_ts) && (timestamp < (invisible_ts + overlap))
                 && (timestamp > 5u) && (duration - timestamp > overlap)); ;
     bool is_fadein = ((timestamp >= visible_ts) && (timestamp < (visible_ts + overlap)) 
@@ -135,16 +165,14 @@ void main () {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
-
-    // direction for sh calculation
-    vec3 shdir = camera_center - cen_position;
     
-    uvec4 cov = texelFetch(gs_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
-    vec3 scale = vec3(unpackHalf2x16(cov.x).xy, unpackHalf2x16(cov.y).x);
-    vec4 rot = vec4(float((cov.z      ) & 0xffu) / 127.5 - 1.0, 
-                    float((cov.z >> 8 ) & 0xffu) / 127.5 - 1.0, 
-                    float((cov.z >> 16) & 0xffu) / 127.5 - 1.0, 
-                    float((cov.z >> 24) & 0xffu) / 127.5 - 1.0);
+    vec3 scale = vec3(unpackHalf2x16(t_s.y).xy, unpackHalf2x16(t_s.z).x);
+    // rotation, rgba & rest_idx
+    uvec3 cov = texelFetch(gs_texture, ivec2((index & 0x3ff) * 3 + 2, index >> 10), 0).rgb;
+    vec4 rot = vec4(float((cov.x      ) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.x >> 8 ) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.x >> 16) & 0xffu) / 127.5 - 1.0, 
+                    float((cov.x >> 24) & 0xffu) / 127.5 - 1.0);
     rot /= sqrt(dot(rot, rot));
     if(is_dynamic){
         rot = quanternion_multiply(rot, rot_offset);
@@ -183,7 +211,8 @@ void main () {
     vec2 minorAxis = min(sqrt(2.0 * lambda2), 1024.0) * vec2(diagonalVector.y, -diagonalVector.x);
 
     //                                                          r                      g                      b                     a 
-    vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
+    vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.y) & 0xffu, (cov.y >> 8) & 0xffu, (cov.y >> 16) & 0xffu, (cov.y >> 24) & 0xffu) / 255.0;
+    uint sh_idx = cov.z;
     vColor.a = is_fadein ? vColor.a * float(timestamp - visible_ts + 1u) / float(overlap + 1u)
                     : (is_fadeout ? vColor.a * float(invisible_ts + overlap - timestamp) / float(overlap + 1u) 
                         : vColor.a);

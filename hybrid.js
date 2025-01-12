@@ -38,6 +38,7 @@ let gsvMeta = {};
 let keyframes = [];
 let manager = new Manager();
 let plyTexData = new Uint32Array();
+let cbTexData = new Uint32Array();
 let playing = false;
 
 async function main() {
@@ -101,7 +102,6 @@ async function main() {
   gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
 
   var gsTexture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, gsTexture);
   var atlasTexture = gl.createTexture();
   var highxyzTexture = gl.createTexture();
   var lowxyzTexture = gl.createTexture();
@@ -109,7 +109,7 @@ async function main() {
   var olhighxyzTexture = gl.createTexture();
   var ollowxyzTexture = gl.createTexture();
   var olrotTexture = gl.createTexture();
-  // gl.bindTexture(gl.TEXTURE_2D, atlastexture);
+  var shTexture = gl.createTexture();
 
   var gs_textureLocation = gl.getUniformLocation(program, "gs_texture");
   gl.uniform1i(gs_textureLocation, 0);
@@ -128,6 +128,9 @@ async function main() {
   gl.uniform1i(ollowxyz_textureLocation, 6);
   var olrot_textureLocation = gl.getUniformLocation(program, "olrot_texture");
   gl.uniform1i(olrot_textureLocation, 7);
+  // for high-order sh
+  var sh_textureLocation = gl.getUniformLocation(program, "sh_texture");
+  gl.uniform1i(sh_textureLocation, 8);
 
   const indexBuffer = gl.createBuffer();
   const a_index = gl.getAttribLocation(program, "index");
@@ -158,7 +161,7 @@ async function main() {
       const { texdata, texwidth, texheight } = e.data;
       // save the previous ply here
       plyTexData = texdata;
-      setTexture(gl, gsTexture, texdata, texwidth, texheight, 0, '32rgbaui');
+      setTexture(gl, gsTexture, texdata, texwidth, texheight, 0, '32rgbui');
       manager.appendOneBuffer(null, null, FTYPES.ply);
       // load next group
       let nextIdx = manager.getNextIndex(FTYPES.ply);
@@ -167,7 +170,21 @@ async function main() {
       } else {
         plyDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
       }
-    } else if (e.data.depthIndex) {
+    } if (e.data.cbtexdata) {
+      const { cbtexdata, texwidth, texheight } = e.data;
+      // save the previous ply here
+      cbTexData = cbtexdata;
+      setTexture(gl, shTexture, cbtexdata, texwidth, texheight, 8, '32rgbui');
+      manager.appendOneBuffer(null, null, FTYPES.cb);
+      // load next group
+      let nextIdx = manager.getNextIndex(FTYPES.cb);
+      if (nextIdx < 0) {
+        cbdownloader.postMessage({ msg: 'finish' });
+      } else {
+        cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+      }
+    }
+    else if (e.data.depthIndex) {
       const { depthIndex, viewProj } = e.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, depthIndex, gl.DYNAMIC_DRAW);
@@ -185,14 +202,20 @@ async function main() {
         while (!manager.initCb) {
           await sleep(100);
         }
-        toolWorker.postMessage({ ply: data, extent: manager.initCb.extent, total: gsvMeta.total_gaussians, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
+        toolWorker.postMessage({
+          ply: data, extent: manager.initCb.extent, groupIdx: -1,
+          total: gsvMeta.total_gaussians, tex: plyTexData
+        }, [data.buffer, plyTexData.buffer]);
       } else {
         // check if the init ply is loaded & if the meta data is ready
         // to ensure in-order processing
         while (vertexCount == 0 || !manager.cbBuffer[keyframe] || !plyTexData) {
           await sleep(100);
         }
-        toolWorker.postMessage({ ply: data, extent: manager.initCb.extent, total: -1, tex: plyTexData }, [data.buffer, plyTexData.buffer]);
+        toolWorker.postMessage({
+          ply: data, extent: manager.initCb.extent, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
+          total: -1, tex: plyTexData
+        }, [data.buffer, plyTexData.buffer]);
       }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
@@ -235,18 +258,21 @@ async function main() {
     } else if (e.data.type && e.data.type == FTYPES.cb) {
       const { cbjson, data, keyframe, type } = e.data;
       if (keyframe == -1) {
+        const totalCBIndex = 2048 * keyframes.length + 1024;
         // process the initial codebook
+        toolWorker.postMessage({ cb: data, total: totalCBIndex, groupIdx: -1, tex: cbTexData }, [data, cbTexData.buffer]);
         manager.setInitCb(cbjson);
       } else {
         manager.appendOneBuffer(cbjson, keyframe, type);
-        // load next group
-        let nextIdx = manager.getNextIndex(type);
-        if (nextIdx < 0) {
-          cbdownloader.postMessage({ msg: 'finish' });
-        } else {
-          cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
+        const groupIdx = parseInt(keyframe) / gsvMeta.GOP;
+        // to ensure in-order processing
+        while (!cbTexData) {
+          await sleep(100);
         }
+        toolWorker.postMessage({ cb: data, total: 0, groupIdx: groupIdx, tex: cbTexData }, [data, cbTexData.buffer]);
       }
+      // set undefined to ensure in-order processing
+      cbTexData = undefined;
     }
   };
 
@@ -647,7 +673,6 @@ async function main() {
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.highxyz });
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
-  cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0] });
 
   await manager.blockUntilCanplay();
 

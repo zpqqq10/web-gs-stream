@@ -93,6 +93,18 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
             gl.UNSIGNED_INT,
             texData,
         );
+    } else if (channels == '32rgbui') {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGB32UI,
+            texWidth,
+            texHeight,
+            0,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_INT,
+            texData,
+        );
     } else if (channels == '32rui') {
         gl.texImage2D(
             gl.TEXTURE_2D,
