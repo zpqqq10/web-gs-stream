@@ -24,7 +24,6 @@ export class Manager {
         this.cbLoaded = -1;
         // whether can play
         this.initCb = null;
-        this.canPlay = false;
         // current frame
         this.currentFrame = 0;
 
@@ -102,15 +101,26 @@ export class Manager {
         if (this.initPly == null && this.initCb == null) {
             document.getElementById("message").innerText = 'loading initial data';
         }
-        while (!this.canPlay) {
+        while (true) {
             document.getElementById("message").innerText = 'loading data';
             await sleep(300);
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) {
-                this.canPlay = true;
+                break;
             }
         }
         document.getElementById("message").innerText = '';
+    }
+
+    canPlay() {
+        const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
+        if (this.initCb != null && (minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) || minloaded == this.totalGroups) {
+            document.getElementById("message").innerText = '';
+            return true;
+        } else {
+            document.getElementById("message").innerText = 'loading data';
+            return false;
+        }
     }
 
     appendOneBuffer(buffer, key, type) {

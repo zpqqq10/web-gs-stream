@@ -42,6 +42,7 @@ out vec4 vColor;
 out vec2 vPosition;
 
 // sh coefficients
+float mip_kernel = .3;
 float PISQRT = 1.77245385091f;
 float SH_C0 = 0.28209479177387814f;
 float SH_C1 = 0.4886025119029199f;
@@ -110,6 +111,7 @@ vec3 computeSH(uint rest_idx, vec3 gs_position, vec3 direct_color){
 }
 
 void main () {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     // xyz center
     uvec3 cen = texelFetch(gs_texture, ivec2((index & 0x3ff) * 3 + 0, index >> 10), 0).rgb;
     vec3 cen_position = uintBitsToFloat(cen);
@@ -123,7 +125,6 @@ void main () {
                 && (timestamp > 5u));
 
     if ((timestamp < visible_ts) || (timestamp >= (invisible_ts + overlap))) {
-        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
     bool is_dynamic = (index >= dynamics.x && index < dynamics.y);
@@ -195,7 +196,6 @@ void main () {
         pos2d.x < -clip || pos2d.x > clip || 
         pos2d.y < -clip || pos2d.y > clip
         ) {
-        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
     
@@ -236,22 +236,30 @@ void main () {
     mat3 T = transpose(mat3(view)) * J;
     mat3 cov2d = transpose(T) * Vrk * T;
 
-    float mid = (cov2d[0][0] + cov2d[1][1]) / 2.0;
+    // for mip-splatting
+    float det_0 = max(cov2d[0][0] * cov2d[1][1] - cov2d[0][1] * cov2d[0][1], 1e-6);
+    float det_1 = max((cov2d[0][0] + mip_kernel) * (cov2d[1][1] + mip_kernel) - cov2d[0][1] * cov2d[0][1], 1e-6);
+    float mip_coef = ((det_0 <= 1e-6) || (det_1 <= 1e-6)) ? 0. : sqrt(det_0 / (det_1 + 1e-6) + 1e-6);
+
+    // float mid = (cov2d[0][0] + cov2d[1][1]) / 2.0;
+    float mid = (cov2d[0][0] + cov2d[1][1]) / 2.0 + mip_kernel;
     float radius = length(vec2((cov2d[0][0] - cov2d[1][1]) / 2.0, cov2d[0][1]));
-    float lambda1 = mid + radius, lambda2 = mid - radius;
+    // float lambda1 = mid + radius, lambda2 = mid - radius;
+    float lambda1 = mid + radius, lambda2 = max(mid - radius, .1);
 
     if(lambda2 < 0.0) return;
-    vec2 diagonalVector = normalize(vec2(cov2d[0][1], lambda1 - cov2d[0][0]));
+    vec2 diagonalVector = normalize(vec2(cov2d[0][1], lambda1 - cov2d[0][0] - mip_kernel));
+    // vec2 diagonalVector = normalize(vec2(cov2d[0][1], lambda1 - cov2d[0][0]));
     vec2 majorAxis = min(sqrt(2.0 * lambda1), 1024.0) * diagonalVector;
     vec2 minorAxis = min(sqrt(2.0 * lambda2), 1024.0) * vec2(diagonalVector.y, -diagonalVector.x);
 
     vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * 
-        //          r                      g                      b                     a 
         vec4((cov.y) & 0xffu, (cov.y >> 8) & 0xffu, (cov.y >> 16) & 0xffu, (cov.y >> 24) & 0xffu) / 255.0;
+        //          r                      g                      b                     a 
     vColor.rgb = PISQRT * 2. *vColor.rgb - PISQRT;
-    uint sh_idx = cov.z;
-    // vColor.rgb = SH_C0 * vColor.rgb + .5;
-    vColor.rgb = computeSH(sh_idx, cen_position, vColor.rgb);
+    // for mip-splatting
+    vColor.a = vColor.a * mip_coef;
+    vColor.rgb = computeSH(cov.z, cen_position, vColor.rgb);
     vColor.a = is_fadein ? vColor.a * float(timestamp - visible_ts + 1u) / float(overlap + 1u)
                     : (is_fadeout ? vColor.a * float(invisible_ts + overlap - timestamp) / float(overlap + 1u) 
                         : vColor.a);

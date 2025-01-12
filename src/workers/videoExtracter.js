@@ -139,7 +139,6 @@ onmessage = (e) => {
 // videoEle.src = videoUrl;
 // let cmp = []
 
-// // TODO 这里可能会有性能问题
 // await startFrameCapture();
 // if (keyframe == keyframes[0]) {
 //   console.log(cmp)

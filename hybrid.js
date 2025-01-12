@@ -72,8 +72,7 @@ async function main() {
 
   // Enable blending
   gl.enable(gl.BLEND);
-  // gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); // error
-  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ONE_MINUS_DST_ALPHA, gl.ONE); // correct
+  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ONE_MINUS_DST_ALPHA, gl.ONE);
   gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
 
   const u_projection = gl.getUniformLocation(program, "projection");
@@ -571,8 +570,8 @@ async function main() {
     if (vertexCount > 0) {
       var elapsed = now - lastFrame;
       // update the frame
-      if (manager.canPlay) {
-        gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+      gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+      if (manager.canPlay()) {
         if (elapsed > targetFPSInterval) {
           lastFrame = now - (elapsed % (targetFPSInterval));
           // control fps
