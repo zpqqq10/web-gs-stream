@@ -66,6 +66,10 @@ async function main() {
   const gl = canvas.getContext("webgl2", {
     antialias: false,
   });
+  // terminate if webgl2 is not supported
+  if (!gl) {
+    throw new Error("WebGL2 is not supported");
+  }
 
   const program = attachShaders(gl, vertexShaderSource, fragmentShaderSource);
   gl.disable(gl.DEPTH_TEST); // Disable depth testing
@@ -626,7 +630,9 @@ async function main() {
 
   // main work here
   // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepin/';
-  const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/flame_salmon_40s/';
+  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/flame_salmon_40s/';
+
+  const baseUrl = params.get('meta') ? params.get('meta') : 'https://raw.githubusercontent.com/zpqqq10/automatic-octo-chainsaw/refs/heads/main/h264/flame_salmon_40s/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 

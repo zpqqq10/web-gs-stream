@@ -30,7 +30,7 @@ export class Manager {
     }
 
     // update the prompt in the middle
-    updatePrompt(hint) {
+    updateMessagePrompt(hint) {
         var oldone = document.getElementById("message").innerText;
         if (oldone.startsWith(hint) && oldone.length < 24) {
             oldone = oldone + ".";
@@ -44,14 +44,14 @@ export class Manager {
         document.getElementById("message").innerText = 'loading wasm';
         while (!this.drcDecoderInit) {
             await sleep(300);
-            this.updatePrompt('loading wasm');
+            this.updateMessagePrompt('loading wasm');
         }
         document.getElementById("message").innerText = 'DRC decoder ready';
         await sleep(500);
         document.getElementById("message").innerText = 'loading opencv';
         while (!this.videoExtracterInit) {
             await sleep(300);
-            this.updatePrompt('loading opencv');
+            this.updateMessagePrompt('loading opencv');
         }
         document.getElementById("message").innerText = 'video extracter ready';
     }
@@ -98,16 +98,24 @@ export class Manager {
 
 
     async blockUntilCanplay() {
-        if (this.initPly == null && this.initCb == null) {
-            document.getElementById("message").innerText = 'loading initial data';
-        }
+        document.getElementById("message").innerText = 'loading initial data';
         while (true) {
-            document.getElementById("message").innerText = 'loading data';
+            if (this.initPly == null && this.initCb == null) {
+                this.updateMessagePrompt('loading initial data');
+            } else {
+                break;
+            }
             await sleep(300);
+        }
+        document.getElementById("message").innerText = 'loading data';
+        while (true) {
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
             if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) {
                 break;
+            } else {
+                this.updateMessagePrompt('loading data');
             }
+            await sleep(300);
         }
         document.getElementById("message").innerText = '';
     }
@@ -118,7 +126,14 @@ export class Manager {
             document.getElementById("message").innerText = '';
             return true;
         } else {
-            document.getElementById("message").innerText = 'loading data';
+            var oldone = document.getElementById("message").innerText;
+            if (oldone == '') {
+                oldone = 'loading data';
+            } else if (oldone.startsWith('loading data') && oldone.length < 24) {
+                oldone = oldone + ".";
+            } else {
+                oldone = 'loading data';
+            }
             return false;
         }
     }
