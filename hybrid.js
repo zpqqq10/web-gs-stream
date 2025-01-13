@@ -684,7 +684,7 @@ async function main() {
 
   playing = true;
   var button = document.getElementById("playPauseButton");
-  button.style.display = 'block';
+  button.style.display = 'flex';
   button.addEventListener('click', () => {
     var icon = button.querySelector("i");
     if (playing) {

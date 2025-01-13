@@ -127,7 +127,7 @@ export class Manager {
             return true;
         } else {
             var oldone = document.getElementById("message").innerText;
-            if (oldone == '') {
+            if (oldone.length == 0) {
                 oldone = 'loading data';
             } else if (oldone.startsWith('loading data') && oldone.length < 24) {
                 oldone = oldone + ".";
