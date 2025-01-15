@@ -84,6 +84,22 @@
       gap: 4px;
     }
 
+    #cornerNote {
+      position: absolute;
+      top: 10px;
+      z-index: 999;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #note {
+      font-weight: bold;
+      font-size: large;
+      color: #c3313d;
+    }
+
     #control {
       position: absolute;
       bottom: 10px;
@@ -135,33 +151,14 @@
       touch-action: none;
     }
 
-    #instructions {
-      background: rgba(0, 0, 0, 0.6);
-      white-space: pre-wrap;
-      padding: 10px;
-      border-radius: 10px;
-      font-size: x-small;
-    }
-
     body.nohf .nohf {
       display: none;
     }
 
-    canvas,
-    video {
+    canvas {
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       /* For modern browsers */
-    }
-
-    #enter {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 10000;
-      padding: 10px;
-      display: none;
     }
   </style>
 </head>
@@ -195,6 +192,11 @@
     <span id="lowProgress"></span>
     <span id="rotProgress"></span>
     <span id="plyProgress"></span>
+    <span id="speed"></span>
+  </div>
+
+  <div id="cornerNote">
+    <span id="note">ONLY A DEMO!</span>
   </div>
 
   <script type="module" src="hybrid.js"></script>

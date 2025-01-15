@@ -26,6 +26,8 @@ class PlyDownloader {
         if (!this.initialized) {
             throw new Error('ply workder not initialized');
         }
+        let startTime, endTime;
+        startTime = performance.now();
         if (keyframe == -1) {
             // process the init ply
             const drcReq = await fetch(new URL('init.ply', baseUrl))
@@ -38,8 +40,9 @@ class PlyDownloader {
             // const plySize = this.drc2plyFc(this.inputPtr, drc.length, this.outputPtr);
             // const outputArrayBuffer = this.drcDecoder.HEAPU8.slice(this.outputPtr, this.outputPtr + plySize);
             // postMessage({ data: outputArrayBuffer, keyframe: keyframe, type: FTYPES.ply }, [outputArrayBuffer.buffer]);
-
-            postMessage({ data: drc, keyframe: keyframe, type: FTYPES.ply }, [drc.buffer]);
+            endTime = performance.now();
+            const netSpeed = (drc.byteLength / 1024 / 1024) / ((endTime - startTime) / 1000);
+            postMessage({ data: drc, keyframe: keyframe, type: FTYPES.ply, speed: netSpeed }, [drc.buffer]);
         } else {
 
             // continue downloading
@@ -55,7 +58,9 @@ class PlyDownloader {
             // const outputArrayBuffer = this.drcDecoder.HEAPU8.slice(this.outputPtr, this.outputPtr + plySize);
             // postMessage({ data: outputArrayBuffer, keyframe: keyframe, type: FTYPES.ply }, [outputArrayBuffer.buffer]);
 
-            postMessage({ data: drc, keyframe: keyframe, type: FTYPES.ply }, [drc.buffer]);
+            endTime = performance.now();
+            const netSpeed = (drc.byteLength / 1024 / 1024) / ((endTime - startTime) / 1000);
+            postMessage({ data: drc, keyframe: keyframe, type: FTYPES.ply, speed: netSpeed }, [drc.buffer]);
 
             // console.timeEnd('download drc&gz of ' + keyframe);
         }

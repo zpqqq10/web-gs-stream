@@ -160,7 +160,7 @@ async function main() {
   window.addEventListener("resize", resize);
   resize();
 
-  toolWorker.onmessage = (e) => {
+  toolWorker.onmessage = async (e) => {
     if (e.data.texdata) {
       const { texdata, texwidth, texheight } = e.data;
       // save the previous ply here
@@ -172,6 +172,7 @@ async function main() {
       if (nextIdx < 0) {
         plyDownloader.postMessage({ msg: 'finish' });
       } else {
+        await sleep(100);
         plyDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
       }
     } if (e.data.cbtexdata) {
@@ -185,6 +186,7 @@ async function main() {
       if (nextIdx < 0) {
         cbdownloader.postMessage({ msg: 'finish' });
       } else {
+        await sleep(100);
         cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
       }
     }
@@ -200,7 +202,7 @@ async function main() {
     if (e.data.msg && e.data.msg == 'ready') {
       manager.initDrcDecoder();
     } else if (e.data.type && e.data.type == FTYPES.ply) {
-      const { data, keyframe, type } = e.data;
+      const { data, keyframe, type, speed } = e.data;
       if (keyframe == -1) {
         // process the initial ply
         while (!manager.initCb) {
@@ -210,6 +212,7 @@ async function main() {
           ply: data, extent: manager.initCb.extent, groupIdx: -1,
           total: gsvMeta.total_gaussians, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
+        document.getElementById("speed").innerText = 'speed: ' + speed.toFixed(2) + ' MB/s';
       } else {
         // check if the init ply is loaded & if the meta data is ready
         // to ensure in-order processing
@@ -220,6 +223,11 @@ async function main() {
           ply: data, extent: manager.initCb.extent, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
           total: -1, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
+        if (keyframe == keyframes[keyframes.length - 1]) {
+          document.getElementById("speed").innerText = '';
+        } else {
+          document.getElementById("speed").innerText = 'speed: ' + speed.toFixed(2) + ' MB/s';
+        }
       }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
@@ -241,6 +249,7 @@ async function main() {
       if (nextIdx < 0) {
         videoDownloader.postMessage({ msg: 'finish' });
       } else {
+        await sleep(100);
         videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx], type: type });
       }
     }
@@ -629,10 +638,12 @@ async function main() {
 
 
   // main work here
-  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/stepin/';
-  // const baseUrl = params.get('meta') ? params.get('meta') : 'http://localhost:8080/fragmented/h264/flame_salmon_40s/';
-
-  const baseUrl = params.get('meta') ? params.get('meta') : 'https://raw.githubusercontent.com/zpqqq10/automatic-octo-chainsaw/refs/heads/main/h264/flame_salmon_40s/';
+  const sceneInput = params.get('scene') ? params.get('scene') : 'flame_salmon_40s';
+  const scenesSupport = ['flame_salmon_40s', 'stepin'];
+  if (!scenesSupport.includes(sceneInput)) {
+    throw new Error('Scene not supported!');
+  }
+  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/h264/' + sceneInput + '/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
@@ -643,7 +654,6 @@ async function main() {
   gsvMeta.frameDuration = 1 / (gsvMeta.GOP + gsvMeta.overlap);
   console.info({ gsvMeta })
   targetFPSInterval = 1000 / gsvMeta.target_fps;
-  // targetFPSInterval = 1000 / 2;
   gl.uniform1i(u_offsetBorder, gsvMeta.offset_position_border);
   gl.uniform1i(u_resolution, gsvMeta.image[0]);
   gl.uniform1ui(u_gop, gsvMeta.GOP);
