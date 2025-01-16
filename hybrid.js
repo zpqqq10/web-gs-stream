@@ -642,7 +642,7 @@ async function main() {
   if (!scenesSupport.includes(sceneInput)) {
     throw new Error('Scene not supported!');
   }
-  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/h264/' + sceneInput + '/';
+  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/' + sceneInput + '/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
@@ -711,6 +711,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  document.getElementById("message").innerText = err.toString();
+  document.getElementById("message").innerText = err.toString() + '\nPlease check your network or REFRESH';
 });
 
