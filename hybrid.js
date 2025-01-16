@@ -212,7 +212,6 @@ async function main() {
           ply: data, extent: manager.initCb.extent, groupIdx: -1,
           total: gsvMeta.total_gaussians, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
-        document.getElementById("speed").innerText = 'speed: ' + speed.toFixed(2) + ' MB/s';
       } else {
         // check if the init ply is loaded & if the meta data is ready
         // to ensure in-order processing
@@ -223,11 +222,11 @@ async function main() {
           ply: data, extent: manager.initCb.extent, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
           total: -1, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
-        if (keyframe == keyframes[keyframes.length - 1]) {
-          document.getElementById("speed").innerText = '';
-        } else {
-          document.getElementById("speed").innerText = 'speed: ' + speed.toFixed(2) + ' MB/s';
-        }
+      }
+      if (keyframe == keyframes[keyframes.length - 1]) {
+        document.getElementById("speed").innerText = '';
+      } else {
+        document.getElementById("speed").innerText = 'estimated speed: ' + speed.toFixed(2) + ' MB/s';
       }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
