@@ -642,7 +642,7 @@ async function main() {
   if (!scenesSupport.includes(sceneInput)) {
     throw new Error('Scene not supported!');
   }
-  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/' + sceneInput + '/';
+  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/h264/' + sceneInput + '/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
