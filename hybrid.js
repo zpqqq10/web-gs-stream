@@ -167,12 +167,12 @@ async function main() {
       plyTexData = texdata;
       setTexture(gl, gsTexture, texdata, texwidth, texheight, 0, '32rgbui');
       manager.appendOneBuffer(null, null, FTYPES.ply);
+      await sleep(100);
       // load next group
       let nextIdx = manager.getNextIndex(FTYPES.ply);
       if (nextIdx < 0) {
         plyDownloader.postMessage({ msg: 'finish' });
       } else {
-        await sleep(100);
         plyDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
       }
     } if (e.data.cbtexdata) {
@@ -181,12 +181,12 @@ async function main() {
       cbTexData = cbtexdata;
       setTexture(gl, shTexture, cbtexdata, texwidth, texheight, 8, '32rgbui');
       manager.appendOneBuffer(null, null, FTYPES.cb);
+      await sleep(100);
       // load next group
       let nextIdx = manager.getNextIndex(FTYPES.cb);
       if (nextIdx < 0) {
         cbdownloader.postMessage({ msg: 'finish' });
       } else {
-        await sleep(100);
         cbdownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx] });
       }
     }
@@ -241,14 +241,15 @@ async function main() {
       for (let i = 0; i < data.buffers.length; i++) {
         const buffer = data.buffers[i].buffer;
         manager.appendOneBuffer(buffer, keyframe, type);
+        await sleep(10);
       }
+      await sleep(100);
       manager.incrementVideoLoaded(type);
       // load next group
       let nextIdx = manager.getNextIndex(type);
       if (nextIdx < 0) {
         videoDownloader.postMessage({ msg: 'finish' });
       } else {
-        await sleep(100);
         videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[nextIdx], type: type });
       }
     }

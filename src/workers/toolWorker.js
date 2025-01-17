@@ -26,7 +26,7 @@ function runSort(viewProj) {
         lastVertexCount = vertexCount2Date;
     }
 
-    // console.time("sort");
+    console.time("sort");
     // not cosider visibility here, since sorting is relevant to camera but not time
     let maxDepth = -Infinity;
     let minDepth = Infinity;
@@ -41,18 +41,18 @@ function runSort(viewProj) {
 
     // This is a x-bit single-pass counting sort
     // bins here can influence sorting efficiency
-    let depthInv = (128 * 128 - 1) / (maxDepth - minDepth);
-    let counts0 = new Uint32Array(128 * 128);
+    let depthInv = (256 * 256 - 1) / (maxDepth - minDepth);
+    let counts0 = new Uint32Array(256 * 256);
     for (let i = 0; i < vertexCount2Date; i++) {
         sizeList[i] = ((sizeList[i] - minDepth) * depthInv) | 0;
         counts0[sizeList[i]]++;
     }
-    let starts0 = new Uint32Array(128 * 128);
-    for (let i = 1; i < 128 * 128; i++) starts0[i] = starts0[i - 1] + counts0[i - 1];
+    let starts0 = new Uint32Array(256 * 256);
+    for (let i = 1; i < 256 * 256; i++) starts0[i] = starts0[i - 1] + counts0[i - 1];
     depthIndex = new Uint32Array(vertexCount2Date);
     for (let i = 0; i < vertexCount2Date; i++) depthIndex[starts0[sizeList[i]]++] = i;
 
-    // console.timeEnd("sort");
+    console.timeEnd("sort");
     lastProj = viewProj;
     postMessage({ depthIndex, viewProj, vertexCount: vertexCount2Date }, [depthIndex.buffer]);
 }
@@ -207,6 +207,7 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
 
     }
     console.timeEnd("build texture");
+    // console.info({ groupIdx, ply: true })
     postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
     return vertexCount + lastVertexCount;
 }
@@ -253,6 +254,7 @@ function processCodebook(inputBuffer, groupIdx, cbtexdata) {
 
     }
     console.timeEnd("build cb texture");
+    // console.info(groupIdx)
     postMessage({ cbtexdata, texwidth, texheight }, [cbtexdata.buffer]);
 }
 
