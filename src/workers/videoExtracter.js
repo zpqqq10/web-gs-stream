@@ -145,13 +145,11 @@ onmessage = (e) => {
 // }
 // async function startFrameCapture() {
 //   try {
-//     // 确保视频可以播放
 //     await new Promise((resolve, reject) => {
 //       videoEle.oncanplay = resolve;
 //       videoEle.onerror = reject;
 //     });
 
-//     // 开始逐帧捕获
 //     for (let currentTime = 0; currentTime < videoEle.duration; currentTime += gsvMeta.frameDuration) {
 
 //       videoEle.pause()
@@ -160,10 +158,8 @@ onmessage = (e) => {
 //         videoEle.onseeked = resolve;
 //       });
 
-//       // 捕获当前帧
 //       captureCtx.drawImage(videoEle, 0, 0, canvasEle.width, canvasEle.height);
 
-//       // 获取帧的像素数据
 //       const imageData = captureCtx.getImageData(0, 0, canvasEle.width, canvasEle.height);
 //       cmp.push(imageData.data)
 //     }

@@ -1,7 +1,7 @@
 var _floatView = new Float32Array(1);
 var _int32View = new Int32Array(_floatView.buffer);
 
-// 将浮点数转换为半精度浮点数
+// convert a float to a half
 export function floatToHalf(float) {
     _floatView[0] = float;
     var f = _int32View[0];
@@ -43,7 +43,7 @@ export function float16ToFloat32(bits) {
 }
 
 
-// 将两个半精度浮点数打包为一个32位整数
+// pack 2 halfs into one float32
 export function packHalf2x16(x, y) {
     return (floatToHalf(x) | (floatToHalf(y) << 16)) >>> 0;
 }
