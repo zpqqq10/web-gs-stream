@@ -26,6 +26,7 @@ export class Manager {
         this.initCb = null;
         // current frame
         this.currentFrame = 0;
+        this.counter = 0;
 
     }
 
@@ -127,13 +128,11 @@ export class Manager {
             return true;
         } else {
             var oldone = document.getElementById("message").innerText;
-            if (oldone.length == 0) {
-                oldone = 'loading data';
-            } else if (oldone.startsWith('loading data') && oldone.length < 24) {
-                oldone = oldone + ".";
-            } else {
-                oldone = 'loading data';
+            if (this.counter == 0) {
+                oldone = (oldone.startsWith('loading data') && oldone.length < 24) ? oldone + "." : 'loading data';
             }
+            this.counter = (this.counter + 1) % 30;
+            document.getElementById("message").innerText = oldone;
             return false;
         }
     }
@@ -231,6 +230,10 @@ export class Manager {
             document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
                 + '/' + Math.floor(this.duration / this.fps);;
         }
+        // update buffered bar
+        const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
+        const bufferedBar = document.getElementById('buffered-bar');
+        bufferedBar.style.width = (minloaded / this.totalGroups * 100) + '%';
     }
 
     getNextIndex(type) {

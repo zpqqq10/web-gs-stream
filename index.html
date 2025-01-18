@@ -117,6 +117,8 @@
       justify-content: center;
       align-items: center;
       gap: 4px;
+      width: 600px;
+      display: none;
     }
 
     #playPauseButton {
@@ -130,7 +132,6 @@
       font-size: 20px;
       cursor: pointer;
       outline: none;
-      display: none;
       margin-right: 10px;
       justify-content: center;
       align-items: center;
@@ -139,6 +140,10 @@
     #ts {
       border: none;
       font-size: 20px;
+      width: 120px;
+      text-align: right;
+      margin-left: 10px;
+      margin-right: 10px;
     }
 
     #caminfo {
@@ -157,6 +162,56 @@
       height: 100%;
       touch-action: none;
     }
+
+    #progress-container {
+      position: relative;
+      flex: 1;
+      height: 24px;
+      background-color: #949494;
+      border-radius: 16px;
+      cursor: pointer;
+    }
+
+    #progress-background {
+      position: absolute;
+      top: 8px;
+      left: 5%;
+      height: 8px;
+      background-color: white;
+      width: 90%;
+      border-radius: 5px;
+    }
+
+    #buffered-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: #c3c3c3;
+      width: 0%;
+      border-radius: 5px;
+    }
+
+    #played-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: #23272e;
+      width: 0%;
+      border-radius: 5px;
+    }
+
+    #progress-ball {
+      position: absolute;
+      top: -4px;
+      width: 16px;
+      height: 16px;
+      background-color: #449aad;
+      border-radius: 16px;
+      cursor: pointer;
+    }
+
 
     body.nohf .nohf {
       display: none;
@@ -191,6 +246,14 @@
       <i class="fas fa-pause"></i>
     </button>
     <span id="ts"></span>
+    <div id="progress-container">
+      <div id="progress-background">
+        <div id="buffered-bar"></div>
+        <div id="played-bar"></div>
+        <div id="progress-ball"></div>
+      </div>
+    </div>
+
   </div>
 
   <div id="progress">

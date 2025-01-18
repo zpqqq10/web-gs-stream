@@ -28,10 +28,10 @@ let cameras = [
 
 let camera = cameras[0];
 let defaultViewMatrix = [
-  1, -0.0004, 0.055, 0,
-  0.025, 0.976, -0.206, 0,
-  -0.053, 0.208, 0.974, 0,
-  0.629, -1.478, 0.545, 1
+  0.99, -0.023, 0.286, 0,
+  0.011, 0.984, 0.163, 0,
+  -0.28, -0.16, 0.944, 0,
+  1.501, -0.13, 0.500, 1
 ];
 let viewMatrix = defaultViewMatrix;
 let gsvMeta = {};
@@ -60,7 +60,10 @@ async function main() {
   plyDownloader.postMessage({ msg: 'init' });
   const canvas = document.getElementById("canvas");
   const fps = document.getElementById("fps");
-
+  // control bar
+  const progressContainer = document.getElementById('progress-container');
+  const playedBar = document.getElementById('played-bar');
+  const progressBall = document.getElementById('progress-ball');
   let projectionMatrix;
 
   const gl = canvas.getContext("webgl2", {
@@ -606,8 +609,14 @@ async function main() {
           setTexture(gl, olhighxyzTexture, manager.getFromOverlapFrame(FTYPES.highxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 5, '8rgbui');
           setTexture(gl, ollowxyzTexture, manager.getFromOverlapFrame(FTYPES.lowxyz), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 6, '8rgbui');
           setTexture(gl, olrotTexture, manager.getFromOverlapFrame(FTYPES.rot), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 7, '8rgbaui');
+
+          // update progress control bar
+          if (!isDragging) {
+            progressBall.style.left = `calc(${(manager.currentFrame / gsvMeta.duration) * 100}% - 8px)`;
+            playedBar.style.width = `${(manager.currentFrame / gsvMeta.duration) * 100}%`;
+          }
         } else {
-          // wait for loading
+          // wait for next frame
         }
       }
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -639,11 +648,12 @@ async function main() {
 
   // main work here
   const sceneInput = params.get('scene') ? params.get('scene') : 'flame_salmon_40s';
-  const scenesSupport = ['flame_salmon_40s', 'stepin'];
+  const scenesSupport = ['flame_salmon_40s', 'trimming', 'coffee_martini'];
   if (!scenesSupport.includes(sceneInput)) {
     throw new Error('Scene not supported!');
   }
-  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/h264/' + sceneInput + '/';
+  // const baseUrl = 'http://localhost:8080/fragmented/' + sceneInput + '/';
+  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/' + sceneInput + '/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 
@@ -690,11 +700,50 @@ async function main() {
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.lowxyz });
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
 
+  // control bar
+  progressContainer.addEventListener('mouseenter', () => {
+    progressBall.style.display = 'block';
+  });
+
+  progressContainer.addEventListener('mouseleave', () => {
+    progressBall.style.display = 'none';
+  });
+
+  let isDragging = false;
+
+  progressBall.addEventListener('mousedown', (event) => {
+    isDragging = true;
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  function onDrag(event) {
+    if (!isDragging) return;
+    // width of the whole progress bar
+    let offsetX = event.clientX - progressContainer.getBoundingClientRect().left;
+    if (offsetX < 0) offsetX = 0;
+    if (offsetX > progressContainer.offsetWidth) offsetX = progressContainer.offsetWidth;
+
+    const percentage = (offsetX / progressContainer.offsetWidth) * 100;
+    progressBall.style.left = `calc(${percentage}% - 8px)`;
+    playedBar.style.width = `${percentage}%`;
+  }
+
+  function onMouseUp() {
+    if (isDragging) {
+      isDragging = false;
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      manager.currentFrame = Math.round(parseFloat(playedBar.style.width) / 100 * manager.duration);
+    }
+  }
+
   await manager.blockUntilCanplay();
 
   playing = true;
+  document.getElementById("control").style.display = 'flex';
   var button = document.getElementById("playPauseButton");
-  button.style.display = 'flex';
   button.addEventListener('click', () => {
     var icon = button.querySelector("i");
     if (playing) {
