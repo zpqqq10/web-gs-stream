@@ -61,7 +61,7 @@ async function main() {
   const canvas = document.getElementById("canvas");
   const fps = document.getElementById("fps");
   // control bar
-  const progressContainer = document.getElementById('progress-container');
+  const progressContainer = document.getElementById('progress-background');
   const playedBar = document.getElementById('played-bar');
   const progressBall = document.getElementById('progress-ball');
   let projectionMatrix;
@@ -701,10 +701,13 @@ async function main() {
   videoDownloader.postMessage({ baseUrl: baseUrl, keyframe: keyframes[0], type: FTYPES.rot });
 
   // control bar
+  progressContainer.addEventListener('click', (event) => {
+    updateProgress(event.clientX);
+    manager.currentFrame = Math.round(parseFloat(playedBar.style.width) / 100 * manager.duration);
+  });
   progressContainer.addEventListener('mouseenter', () => {
     progressBall.style.display = 'block';
   });
-
   progressContainer.addEventListener('mouseleave', () => {
     progressBall.style.display = 'none';
   });
@@ -717,16 +720,20 @@ async function main() {
     document.addEventListener('mouseup', onMouseUp);
   });
 
-  function onDrag(event) {
-    if (!isDragging) return;
+  function updateProgress(positionX){
     // width of the whole progress bar
-    let offsetX = event.clientX - progressContainer.getBoundingClientRect().left;
+    let offsetX = positionX- progressContainer.getBoundingClientRect().left;
     if (offsetX < 0) offsetX = 0;
     if (offsetX > progressContainer.offsetWidth) offsetX = progressContainer.offsetWidth;
 
     const percentage = (offsetX / progressContainer.offsetWidth) * 100;
     progressBall.style.left = `calc(${percentage}% - 8px)`;
     playedBar.style.width = `${percentage}%`;
+  }
+
+  function onDrag(event) {
+    if (!isDragging) return;
+    updateProgress(event.clientX);
   }
 
   function onMouseUp() {
