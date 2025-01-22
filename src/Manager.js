@@ -27,6 +27,8 @@ export class Manager {
         // current frame
         this.currentFrame = 0;
         this.counter = 0;
+        // how many future groups are ready to allow playing
+        this.bufferLen = 2;
 
     }
 
@@ -111,7 +113,7 @@ export class Manager {
         document.getElementById("message").innerText = 'loading data';
         while (true) {
             const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
-            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) {
+            if (this.initCb != null && minloaded >= Math.floor(this.currentFrame / this.GOP) + this.bufferLen) {
                 break;
             } else {
                 this.updateMessagePrompt('loading data');
@@ -123,7 +125,7 @@ export class Manager {
 
     canPlay() {
         const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
-        if (this.initCb != null && (minloaded >= Math.floor(this.currentFrame / this.GOP) + 5) || minloaded == this.totalGroups) {
+        if (this.initCb != null && (minloaded >= Math.floor(this.currentFrame / this.GOP) + this.bufferLen) || minloaded == this.totalGroups) {
             document.getElementById("message").innerText = '';
             return true;
         } else {
@@ -214,22 +216,22 @@ export class Manager {
 
     // update the progress hint in the top-left corner
     updateProgressHint(type) {
-        if (type === FTYPES.ply) {
-            document.getElementById("plyProgress").innerText = 'ply: ' + ((this.plyLoaded < 0 ? 0 : this.plyLoaded) * this.GOP / this.fps).toFixed(2)
-                + '/' + Math.floor(this.duration / this.fps);
-        } else if (type === FTYPES.highxyz) {
-            document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
-                + '/' + Math.floor(this.duration / this.fps);;
-        } else if (type === FTYPES.lowxyz) {
-            document.getElementById("lowProgress").innerText = 'low: ' + (this.lowxyzLoaded * this.GOP / this.fps).toFixed(2)
-                + '/' + Math.floor(this.duration / this.fps);;
-        } else if (type === FTYPES.rot) {
-            document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
-                + '/' + Math.floor(this.duration / this.fps);
-        } else if (type === FTYPES.cb) {
-            document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
-                + '/' + Math.floor(this.duration / this.fps);;
-        }
+        // if (type === FTYPES.ply) {
+        //     document.getElementById("plyProgress").innerText = 'ply: ' + ((this.plyLoaded < 0 ? 0 : this.plyLoaded) * this.GOP / this.fps).toFixed(2)
+        //         + '/' + Math.floor(this.duration / this.fps);
+        // } else if (type === FTYPES.highxyz) {
+        //     document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
+        //         + '/' + Math.floor(this.duration / this.fps);;
+        // } else if (type === FTYPES.lowxyz) {
+        //     document.getElementById("lowProgress").innerText = 'low: ' + (this.lowxyzLoaded * this.GOP / this.fps).toFixed(2)
+        //         + '/' + Math.floor(this.duration / this.fps);;
+        // } else if (type === FTYPES.rot) {
+        //     document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
+        //         + '/' + Math.floor(this.duration / this.fps);
+        // } else if (type === FTYPES.cb) {
+        //     document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
+        //         + '/' + Math.floor(this.duration / this.fps);;
+        // }
         // update buffered bar
         const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
         const bufferedBar = document.getElementById('buffered-bar');

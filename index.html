@@ -121,6 +121,19 @@
       display: none;
     }
 
+    #speed {
+      position: absolute;
+      bottom: 60px;
+      z-index: 999;
+      left: 30px;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      gap: 4px;
+      display: none;
+    }
+
     #playPauseButton {
       width: 42px;
       height: 42px;
@@ -253,17 +266,17 @@
         <div id="progress-ball"></div>
       </div>
     </div>
-
   </div>
+  <span id="speed"></span>
 
-  <div id="progress">
+  <!-- <div id="progress">
     <span id="cbProgress"></span>
     <span id="highProgress"></span>
     <span id="lowProgress"></span>
     <span id="rotProgress"></span>
     <span id="plyProgress"></span>
     <span id="speed"></span>
-  </div>
+  </div> -->
 
   <div id="cornerNote">
     <span id="note1">ONLY A DEMO</span>

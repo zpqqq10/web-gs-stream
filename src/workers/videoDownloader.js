@@ -12,6 +12,7 @@ class VideoDownloader {
             throw new Error('video downloader not initialized');
         }
 
+        var startTime = performance.now();
         let videoName = '';
         switch (type) {
             case FTYPES.lowxyz:
@@ -31,7 +32,9 @@ class VideoDownloader {
         const req = await fetch(new URL(keyframe + videoName, baseUrl));
         if (req.status != 200) throw new Error(req.status + " Unable to load " + req.url);
         const dataBuffer = await req.arrayBuffer();
-        postMessage({ data: dataBuffer, keyframe: keyframe, type: type }, [dataBuffer]);
+        var endTime = performance.now();
+        const netSpeed = (dataBuffer.byteLength / 1024 / 1024) / ((endTime - startTime) / 1000);
+        postMessage({ data: dataBuffer, keyframe: keyframe, type: type, speed: netSpeed }, [dataBuffer]);
         // console.timeEnd('download video of ' + keyframe)
 
     }

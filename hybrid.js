@@ -262,9 +262,13 @@ async function main() {
     if (e.data.msg && e.data.msg == 'ready') {
       // do nothing
     } else if (e.data.type) {
-      const { data, keyframe, type } = e.data;
+      const { data, keyframe, type, speed } = e.data;
+      if (keyframe == keyframes[keyframes.length - 1]) {
+        document.getElementById("speed").innerText = '';
+      } else {
+        document.getElementById("speed").innerText = 'estimated speed: ' + speed.toFixed(2) + ' MB/s';
+      }
       videoExtracter.postMessage({ data: data, keyframe: keyframe, type: type }, [data]);
-
     }
   };
 
@@ -648,7 +652,8 @@ async function main() {
 
   // main work here
   const sceneInput = params.get('scene') ? params.get('scene') : 'flame_salmon_40s';
-  const scenesSupport = ['flame_salmon_40s', 'trimming', 'coffee_martini'];
+  const scenesSupport = ['flame_salmon_40s', 'trimming', 'coffee_martini', 'cook_spinach', 'cut_roasted_beef',
+    'flame_salmon', 'flame_steak', 'sear_steak', 'discussion', 'UNO'];
   if (!scenesSupport.includes(sceneInput)) {
     throw new Error('Scene not supported!');
   }
@@ -673,8 +678,8 @@ async function main() {
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))
   keyframes = [];
-  for (let index = gsvMeta.begin_index; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
-    keyframes.push(padZeroStart(index.toString()));
+  for (let index = 0; index < gsvMeta.duration - gsvMeta.overlap; index += gsvMeta.GOP) {
+    keyframes.push(padZeroStart((index + gsvMeta.begin_index).toString()));
   }
   manager.setMetaInfo(keyframes.length, gsvMeta.GOP, gsvMeta.overlap, gsvMeta.duration, gsvMeta.target_fps);
 
@@ -684,6 +689,8 @@ async function main() {
   const cameraData = await cameraReq.json()
   cameras = cameraData;
   camera = cameraData[0];
+  // update viewMatrix
+  viewMatrix = getViewMatrix(camera);
   const atlas = await atlasReq.arrayBuffer();
   // atlas: morton order as the index and return the index in the image
   setTexture(gl, atlasTexture, new Uint32Array(atlas), 1024, Math.ceil((gsvMeta.image[0] * gsvMeta.image[1]) / 1024), 1, '32rui');
@@ -720,9 +727,9 @@ async function main() {
     document.addEventListener('mouseup', onMouseUp);
   });
 
-  function updateProgress(positionX){
+  function updateProgress(positionX) {
     // width of the whole progress bar
-    let offsetX = positionX- progressContainer.getBoundingClientRect().left;
+    let offsetX = positionX - progressContainer.getBoundingClientRect().left;
     if (offsetX < 0) offsetX = 0;
     if (offsetX > progressContainer.offsetWidth) offsetX = progressContainer.offsetWidth;
 
@@ -750,6 +757,7 @@ async function main() {
 
   playing = true;
   document.getElementById("control").style.display = 'flex';
+  document.getElementById("speed").style.display = 'flex';
   var button = document.getElementById("playPauseButton");
   button.addEventListener('click', () => {
     var icon = button.querySelector("i");
