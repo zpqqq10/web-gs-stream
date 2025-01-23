@@ -226,10 +226,11 @@ async function main() {
           total: -1, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
       }
-      if (keyframe == keyframes[keyframes.length - 1]) {
+      if (type != FTYPES.rot && keyframe == keyframes[keyframes.length - 1]) {
         document.getElementById("speed").innerText = '';
-      } else {
-        document.getElementById("speed").innerText = 'estimated speed: ' + speed.toFixed(2) + ' MB/s';
+      } else if (type != FTYPES.rot) {
+        var _speed = parseFloat(document.getElementById("speed").innerText.split(' ')[2]) * .6 + speed * .4;
+        document.getElementById("speed").innerText = 'estimated speed: ' + _speed.toFixed(2) + ' MB/s';
       }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
@@ -651,9 +652,9 @@ async function main() {
 
 
   // main work here
-  const sceneInput = params.get('scene') ? params.get('scene') : 'flame_salmon_40s';
+  const sceneInput = params.get('scene') ? params.get('scene') : 'flame_salmon_dense';
   const scenesSupport = ['flame_salmon_40s', 'trimming', 'coffee_martini', 'cook_spinach', 'cut_roasted_beef',
-    'flame_salmon', 'flame_steak', 'sear_steak', 'discussion', 'UNO'];
+    'flame_salmon', 'flame_steak', 'sear_steak', 'discussion', 'UNO', 'flame_salmon_dense'];
   if (!scenesSupport.includes(sceneInput)) {
     throw new Error('Scene not supported!');
   }
