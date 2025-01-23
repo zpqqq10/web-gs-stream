@@ -216,22 +216,22 @@ export class Manager {
 
     // update the progress hint in the top-left corner
     updateProgressHint(type) {
-        // if (type === FTYPES.ply) {
-        //     document.getElementById("plyProgress").innerText = 'ply: ' + ((this.plyLoaded < 0 ? 0 : this.plyLoaded) * this.GOP / this.fps).toFixed(2)
-        //         + '/' + Math.floor(this.duration / this.fps);
-        // } else if (type === FTYPES.highxyz) {
-        //     document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
-        //         + '/' + Math.floor(this.duration / this.fps);;
-        // } else if (type === FTYPES.lowxyz) {
-        //     document.getElementById("lowProgress").innerText = 'low: ' + (this.lowxyzLoaded * this.GOP / this.fps).toFixed(2)
-        //         + '/' + Math.floor(this.duration / this.fps);;
-        // } else if (type === FTYPES.rot) {
-        //     document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
-        //         + '/' + Math.floor(this.duration / this.fps);
-        // } else if (type === FTYPES.cb) {
-        //     document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
-        //         + '/' + Math.floor(this.duration / this.fps);;
-        // }
+        if (type === FTYPES.ply) {
+            document.getElementById("plyProgress").innerText = 'ply: ' + ((this.plyLoaded < 0 ? 0 : this.plyLoaded) * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps) + ' groups';
+        } else if (type === FTYPES.highxyz) {
+            document.getElementById("highProgress").innerText = 'high: ' + (this.highxyzLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps) + ' groups';
+        } else if (type === FTYPES.lowxyz) {
+            document.getElementById("lowProgress").innerText = 'low: ' + (this.lowxyzLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps) + ' groups';
+        } else if (type === FTYPES.rot) {
+            document.getElementById("rotProgress").innerText = 'rot: ' + (this.rotLoaded * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps) + ' groups';
+        } else if (type === FTYPES.cb) {
+            document.getElementById("cbProgress").innerText = 'codebooks: ' + ((this.cbLoaded < 0 ? 0 : this.cbLoaded) * this.GOP / this.fps).toFixed(2)
+                + '/' + Math.floor(this.duration / this.fps) + ' groups';
+        }
         // update buffered bar
         const minloaded = Math.min(this.plyLoaded, this.highxyzLoaded, this.lowxyzLoaded, this.rotLoaded, this.cbLoaded);
         const bufferedBar = document.getElementById('buffered-bar');

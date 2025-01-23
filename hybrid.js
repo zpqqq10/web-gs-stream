@@ -226,12 +226,12 @@ async function main() {
           total: -1, tex: plyTexData
         }, [data.buffer, plyTexData.buffer]);
       }
-      if (type != FTYPES.rot && keyframe == keyframes[keyframes.length - 1]) {
-        document.getElementById("speed").innerText = '';
-      } else if (type != FTYPES.rot) {
-        var _speed = parseFloat(document.getElementById("speed").innerText.split(' ')[2]) * .6 + speed * .4;
-        document.getElementById("speed").innerText = 'estimated speed: ' + _speed.toFixed(2) + ' MB/s';
-      }
+      // if (keyframe == keyframes[keyframes.length - 1]) {
+      //   document.getElementById("speed").innerText = '';
+      // } else {
+      //   var _speed = parseFloat(document.getElementById("speed").innerText.split(' ')[2]) * .6 + speed * .4;
+      //   document.getElementById("speed").innerText = 'estimated speed: ' + _speed.toFixed(2) + ' MB/s';
+      // }
       // set undefined to ensure in-order processing
       plyTexData = undefined;
     }
@@ -264,11 +264,11 @@ async function main() {
       // do nothing
     } else if (e.data.type) {
       const { data, keyframe, type, speed } = e.data;
-      if (keyframe == keyframes[keyframes.length - 1]) {
-        document.getElementById("speed").innerText = '';
-      } else {
-        document.getElementById("speed").innerText = 'estimated speed: ' + speed.toFixed(2) + ' MB/s';
-      }
+      // if (type != FTYPES.rot && keyframe == keyframes[keyframes.length - 1]) {
+      //   document.getElementById("speed").innerText = '';
+      // } else if (type != FTYPES.rot) {
+      //   document.getElementById("speed").innerText = 'estimated speed: ' + speed.toFixed(2) + ' MB/s';
+      // }
       videoExtracter.postMessage({ data: data, keyframe: keyframe, type: type }, [data]);
     }
   };
@@ -530,8 +530,8 @@ async function main() {
     //
     if (activeKeys.includes("ArrowRight")) inv = translate4(inv, 0.03, 0, 0);
     // inv = rotate4(inv, 0.01, 0, 1, 0);
-    if (activeKeys.includes("KeyA")) inv = rotate4(inv, -0.01, 0, 1, 0);
-    if (activeKeys.includes("KeyD")) inv = rotate4(inv, 0.01, 0, 1, 0);
+    if (activeKeys.includes("KeyA")) inv = rotate4(inv, -0.005, 0, 1, 0);
+    if (activeKeys.includes("KeyD")) inv = rotate4(inv, 0.005, 0, 1, 0);
     if (activeKeys.includes("KeyQ")) inv = rotate4(inv, 0.01, 0, 0, 1);
     if (activeKeys.includes("KeyE")) inv = rotate4(inv, -0.01, 0, 0, 1);
     if (activeKeys.includes("KeyW")) inv = rotate4(inv, 0.005, 1, 0, 0);
@@ -758,7 +758,7 @@ async function main() {
 
   playing = true;
   document.getElementById("control").style.display = 'flex';
-  document.getElementById("speed").style.display = 'flex';
+  // document.getElementById("speed").style.display = 'flex';
   var button = document.getElementById("playPauseButton");
   button.addEventListener('click', () => {
     var icon = button.querySelector("i");
