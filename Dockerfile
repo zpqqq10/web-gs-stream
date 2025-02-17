@@ -1,8 +1,10 @@
-FROM nginx:1.27
+FROM nginx:latest
 
-WORKDIR /usr/share/nginx/html
+RUN rm -rf /usr/share/nginx/html/*
 
-COPY . .
+# WORKDIR /usr/share/nginx/html
+
+COPY . /usr/share/nginx/html
 
 EXPOSE 80
 
