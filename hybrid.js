@@ -659,7 +659,7 @@ async function main() {
     throw new Error('Scene not supported!');
   }
   // const baseUrl = 'http://localhost:8080/fragmented/' + sceneInput + '/';
-  const baseUrl = 'https://raw.githubusercontent.com/esKkEY/psychic-octo-lamp/refs/heads/main/webbackend/' + sceneInput + '/';
+  const baseUrl = 'https://raw.githubusercontent.com/zpqqq10/stream-backend-demo/refs/heads/main/webbackend/' + sceneInput + '/';
 
   document.getElementById("message").innerText = 'requesting metadata...';
 

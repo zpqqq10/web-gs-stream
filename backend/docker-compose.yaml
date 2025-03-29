@@ -1,0 +1,12 @@
+# docker run -d --name backend -p 8080:8080 -v ./dashize265:/app/dashize265 -v ./dashize264:/app/dashize264 stream-backend:0.0.2
+
+version: "3"
+services:
+  backend:
+    image: stream-backend:0.0.5
+    container_name: backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./localbackend:/app/localbackend
+      - ./webbackend:/app/webbackend
