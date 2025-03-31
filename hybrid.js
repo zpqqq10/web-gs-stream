@@ -298,6 +298,31 @@ async function main() {
     }
   };
 
+  toolWorker.onerror = (e) => {
+    console.error(e.toString(), 'worker error');
+    throw new Error(e);
+  }
+
+  plyDownloader.onerror = (e) => {
+    console.error(e.toString(), 'plyDownloader error');
+    throw new Error(e);
+  }
+
+  videoExtracter.onerror = (e) => {
+    console.error(e.toString(), 'videoExtracter error');
+    throw new Error(e);
+  }
+
+  videoDownloader.onerror = (e) => {
+    console.error(e.toString(), 'videoDownloader error');
+    throw new Error(e);
+  }
+
+  cbdownloader.onerror = (e) => {
+    console.error(e.toString(), 'cbdownloader error');
+    throw new Error(e);
+  }
+
   let activeKeys = [];
   let currentCameraIndex = 0;
 
