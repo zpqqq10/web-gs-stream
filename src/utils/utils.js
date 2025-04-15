@@ -6,6 +6,14 @@ export const FTYPES = {
     cb: 5
 };
 
+// for memory alignment
+export const BYTES_U8 = 1;
+export const BYTES_F32 = 4;
+export const BYTES_U32 = 4;
+export const BYTES_U64 = 8;
+export const BYTES_VEC4 = BYTES_F32 * 4;
+export const BYTES_MAT4 = BYTES_F32 * 16;
+
 export const preventDefault = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -170,4 +178,45 @@ export function setTexture(gl, texture, texData, texWidth, texHeight, index, cha
     }
     // gl.activeTexture(gl.TEXTURE0);
     // gl.bindTexture(gl.TEXTURE_2D, texture);
+}
+
+export function assertHasInjectedShader(clazz) {
+    if (!clazz.SHADER_CODE || clazz.SHADER_CODE.length == 0) {
+        throw new Error(`${clazz.name} has .SHADER_CODE undefined.`);
+    }
+}
+
+export const getItemsPerThread = (items, threads) => {
+    return Math.ceil(items / threads);
+}
+
+export function writeMatrixToGPUBuffer(
+    device,
+    gpuBuffer,
+    offsetBytes,
+    data
+) {
+    // does not check type here
+    // the caller should check the data type
+    device.queue.writeBuffer(gpuBuffer, offsetBytes, data.buffer, 0);
+}
+
+/**
+ * In WGSL there is something called overrides:
+ *  - https://www.w3.org/TR/WGSL/#override-declaration
+ *  - https://webgpufundamentals.org/webgpu/lessons/webgpu-constants.html
+ * Would have been better than text replace. But neither works
+ * with language servers in text editors, so might as well text replace.
+ */
+export function applyShaderTextReplace(
+    text,
+    // [string]: string dict
+    overrides
+) {
+    let code = text;
+    overrides = overrides || {};
+    Object.entries(overrides).forEach(([k, v]) => {
+        code = code.replaceAll(k, v);
+    });
+    return code;
 }

@@ -2,6 +2,7 @@ import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSVSahders.j
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4, float16ToFloat32 } from "./src/utils/mathUtils.js";
 import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture } from "./src/utils/utils.js";
 import { Manager } from "./src/Manager.js";
+import { GPUProfiler } from "./src/gpuProfiler.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
 const PlyDownloaderUrl = './src/workers/plyDownloader.js';
@@ -48,6 +49,14 @@ async function main() {
     viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
     carousel = false;
   } catch (err) { }
+
+  // gpu device
+  const device = await GPUProfiler.createGpuDevice();
+  if (device) {
+    // there is a gpu
+    document.getElementById("note2").innerText = 'sort by GPU!'
+    console.info(device);
+  }
 
   const toolWorker = new Worker(ToolWorkerUrl, { type: 'module' });
   const plyDownloader = new Worker(PlyDownloaderUrl, { type: 'module' });
@@ -321,6 +330,11 @@ async function main() {
   cbdownloader.onerror = (e) => {
     console.error(e.toString(), 'cbdownloader error');
     throw new Error(e);
+  }
+
+  const sortGS = (viewProj) => {
+    // TODO use gpu
+    device ? toolWorker.postMessage({ view: viewProj }) : toolWorker.postMessage({ view: viewProj });
   }
 
   let activeKeys = [];
@@ -607,7 +621,7 @@ async function main() {
     gl.uniform3fv(u_cameraCenter, new Float32Array([inv2[12], inv2[13], inv2[14]]));
 
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
-    toolWorker.postMessage({ view: viewProj });
+    sortGS(viewProj);
 
     // update fps hint
     const currentFps = 1000 / (now - lastFpsTime) || 0;
