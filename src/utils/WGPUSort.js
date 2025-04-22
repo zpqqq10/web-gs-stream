@@ -4,43 +4,57 @@ import {
     getItemsPerThread,
     writeMatrixToGPUBuffer,
     BYTES_VEC4,
-    BYTES_MAT4
-} from './utils.ts';
+    BYTES_MAT4,
+    BYTES_U32,
+    createGPUBuffer
+} from './utils.js';
 
-export class CalcDepthsPass {
+export class DepthCalculator {
     // save the name as a static member
-    static NAME = CalcDepthsPass.name;
+    static NAME = DepthCalculator.name;
     static NUM_THREADS = 64;
     static SHADER_CODE = '';
 
     // device: GPUDevice,
-    // splatPositions: GPUBuffer,
     // distancesBuffer: GPUBuffer,
     // indicesBuffer: GPUBuffer
+    // total_gs: int
     constructor(
         device,
-        splatPositions,
-        // F32 buffer of size nearestPowerOf2_ceil($vertexCount)
+        // F32 buffer of size nearestPowerOf2_ceil($total_gs)
         distancesBuffer,
-        // U32 buffer of size nearestPowerOf2_ceil($vertexCount)
-        indicesBuffer
+        // U32 buffer of size nearestPowerOf2_ceil($total_gs)
+        indicesBuffer,
+        // total number of gs of whole video
+        total_gs
     ) {
-        assertHasInjectedShader(CalcDepthsPass);
-        const vertexCount = splatPositions.size / BYTES_VEC4;
+        assertHasInjectedShader(DepthCalculator);
         const itemsPerThread = getItemsPerThread(
-            vertexCount,
-            CalcDepthsPass.NUM_THREADS
+            total_gs,
+            DepthCalculator.NUM_THREADS
         );
 
-        this.uniformsBuffer = device.createBuffer({
-            label: 'CalcDepthsPass-uniforms',
+        this.positionBuffer = device.createBuffer({
+            label: 'depth-calculator-position',
+            size: BYTES_VEC4 * total_gs,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        });
+
+        this.viewBuffer = device.createBuffer({
+            label: 'depth-calculator-uniforms',
             size: BYTES_MAT4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        this.pipeline = CalcDepthsPass.createPipeline(
+
+        this.vertexCountBuffer = device.createBuffer({
+            label: 'depth-calculator-vertexCount',
+            size: BYTES_U32,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        this.pipeline = DepthCalculator.createPipeline(
             device,
-            vertexCount,
             itemsPerThread
         );
 
@@ -49,7 +63,7 @@ export class CalcDepthsPass {
             entries: [
                 {
                     binding: 0,
-                    resource: { buffer: splatPositions },
+                    resource: { buffer: this.positionBuffer },
                 },
                 {
                     binding: 1,
@@ -61,7 +75,11 @@ export class CalcDepthsPass {
                 },
                 {
                     binding: 3,
-                    resource: { buffer: this.uniformsBuffer },
+                    resource: { buffer: this.viewBuffer },
+                },
+                {
+                    binding: 4,
+                    resource: { buffer: this.vertexCountBuffer },
                 },
             ],
         });
@@ -70,13 +88,10 @@ export class CalcDepthsPass {
     static createPipeline(
         device,
         // int
-        vertexCount,
-        // int
         itemsPerThread
     ) {
-        const code = applyShaderTextReplace(CalcDepthsPass.SHADER_CODE, {
+        const code = applyShaderTextReplace(DepthCalculator.SHADER_CODE, {
             __ITEMS_PER_THREAD__: '' + itemsPerThread,
-            __SPLAT_COUNT__: '' + vertexCount,
         });
         const shaderModule = device.createShaderModule({ code });
         return device.createComputePipeline({
@@ -89,17 +104,21 @@ export class CalcDepthsPass {
     }
 
     cmdCalcDepths(ctx) {
-        const { cmdBuf, device, mvpMatrix, profiler } = ctx;
+        const { cmdBuf, device, viewProj, profiler, currentVertexCount, positions } = ctx;
 
-        writeMatrixToGPUBuffer(device, this.uniformsBuffer, 0, mvpMatrix);
+        writeMatrixToGPUBuffer(device, this.positionBuffer, 0, positions);
+        const viewProjBuffer = new Float32Array(viewProj);
+        writeMatrixToGPUBuffer(device, this.viewBuffer, 0, viewProjBuffer);
+        const vtxCountArray = new Uint32Array([currentVertexCount]);
+        writeMatrixToGPUBuffer(device, this.vertexCountBuffer, 0, vtxCountArray);
 
         const computePass = cmdBuf.beginComputePass({
-            label: 'calc-depths-pass',
-            timestampWrites: profiler?.createScopeGpu(CalcDepthsPass.NAME),
+            label: 'depth-calculator',
+            timestampWrites: profiler?.createScopeGpu(DepthCalculator.NAME),
         });
         computePass.setPipeline(this.pipeline);
         computePass.setBindGroup(0, this.uniformsBindings);
-        computePass.dispatchWorkgroups(CalcDepthsPass.NUM_THREADS);
+        computePass.dispatchWorkgroups(DepthCalculator.NUM_THREADS);
         computePass.end();
     }
 
@@ -174,7 +193,6 @@ export class BitonicSorter {
     cmdSort(ctx) {
         const { cmdBuf, profiler } = ctx;
 
-
         this.gpuUniformBuffersBindGroups.forEach((uniformBindGroup) => {
             const computePass = cmdBuf.beginComputePass({
                 timestampWrites: profiler?.createScopeGpu(BitonicSorter.NAME),
@@ -213,7 +231,7 @@ export class BitonicSorter {
                 const gpuBuffer = createGPUBuffer(
                     device,
                     `bitonic-sort.uniforms-buffer(k=${k},j=${j})`,
-                    GPU_BUFFER_USAGE_UNIFORM,
+                    GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
                     bufferContent
                 );
                 uniformBuffers.push(gpuBuffer);
@@ -257,8 +275,8 @@ export class BitonicSorter {
     }
 }
 
-export class UnrollIndicesPass {
-    static NAME = UnrollIndicesPass.name;
+export class IndexUnroller {
+    static NAME = IndexUnroller.name;
     static NUM_THREADS = 64;
     static SHADER_CODE = '';
 
@@ -268,16 +286,22 @@ export class UnrollIndicesPass {
         indicesBuffer,
         // GPUBuffer,
         unrolledIndicesBuffer,
-        // int
-        vertexCount
+        // int, total number of gs of whole video
+        total_gs
     ) {
-        assertHasInjectedShader(UnrollIndicesPass);
+        assertHasInjectedShader(IndexUnroller);
         const itemsPerThread = getItemsPerThread(
-            vertexCount,
-            UnrollIndicesPass.NUM_THREADS
+            total_gs,
+            IndexUnroller.NUM_THREADS
         );
 
-        this.pipeline = UnrollIndicesPass.createPipeline(device, itemsPerThread);
+        this.vertexCountBuffer = device.createBuffer({
+            label: 'index-unroller-vertexCount',
+            size: BYTES_U32,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        this.pipeline = IndexUnroller.createPipeline(device, itemsPerThread);
 
         this.uniformsBindings = device.createBindGroup({
             layout: this.pipeline.getBindGroupLayout(0),
@@ -290,6 +314,10 @@ export class UnrollIndicesPass {
                     binding: 1,
                     resource: { buffer: unrolledIndicesBuffer },
                 },
+                {
+                    binding: 2,
+                    resource: { buffer: this.vertexCountBuffer },
+                },
             ],
         });
     }
@@ -297,10 +325,9 @@ export class UnrollIndicesPass {
     static createPipeline(device,
         // int 
         itemsPerThread) {
-        const code = applyShaderTextReplace(UnrollIndicesPass.SHADER_CODE, {
+        const code = applyShaderTextReplace(IndexUnroller.SHADER_CODE, {
             __ITEMS_PER_THREAD__: '' + itemsPerThread,
-            // TODO remove this?
-            __VERTICES_PER_SPLAT__: '6',
+            __VERTICES_PER_SPLAT__: '1',
         });
         const shaderModule = device.createShaderModule({ code });
         return device.createComputePipeline({
@@ -313,15 +340,17 @@ export class UnrollIndicesPass {
     }
 
     cmdUnrollIndices(ctx) {
-        const { cmdBuf, profiler } = ctx;
+        const { device, cmdBuf, profiler, currentVertexCount } = ctx;
+
+        writeMatrixToGPUBuffer(device, this.vertexCountBuffer, 0, new Uint32Array([currentVertexCount]));
 
         const computePass = cmdBuf.beginComputePass({
-            label: 'unroll-indices-pass',
-            timestampWrites: profiler?.createScopeGpu(UnrollIndicesPass.NAME),
+            label: 'index-unroller',
+            timestampWrites: profiler?.createScopeGpu(IndexUnroller.NAME),
         });
         computePass.setPipeline(this.pipeline);
         computePass.setBindGroup(0, this.uniformsBindings);
-        computePass.dispatchWorkgroups(UnrollIndicesPass.NUM_THREADS);
+        computePass.dispatchWorkgroups(IndexUnroller.NUM_THREADS);
         computePass.end();
     }
 

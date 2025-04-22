@@ -50,6 +50,7 @@ export class GPUProfiler {
       size: this.queryInProgressBuffer.size,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
+    this.currentFrameScopes = [];
   }
 
   static async createGpuDevice() {
@@ -121,7 +122,7 @@ export class GPUProfiler {
     }
   }
 
-  async scheduleRaportIfNeededAsync(onResult) {
+  async scheduleReportIfNeededAsync(onResult) {
     if (!this.enabled || this.currentFrameScopes.length == 0) {
       this._profileThisFrame = false;
       return;

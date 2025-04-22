@@ -12,9 +12,6 @@ var<storage, read_write> depthBuffer: array<f32>;
 @group(0) @binding(2)
 var<uniform> uniforms: Uniforms;
 
-@group(0) @binding(2)
-var<uniform> vertexCount: u32;
-
 
 // https://en.wikipedia.org/wiki/Bitonic_sorter
 @compute

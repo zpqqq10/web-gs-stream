@@ -170,3 +170,18 @@ export function translate4(a, x, y, z) {
         a[3] * x + a[7] * y + a[11] * z + a[15],
     ];
 }
+
+/** Returns floor. Examples:
+ * - for 3 returns 2
+ * - for 4 returns 4
+ * - for 7 returns 4
+ * - for 8 returns 8
+ */
+export function nearestPowerOf2_floor(n) {
+    return 1 << (31 - Math.clz32(n));
+}
+
+export function nearestPowerOf2_ceil(n) {
+    const floor = nearestPowerOf2_floor(n);
+    return floor === n ? n : 2 * floor;
+}

@@ -20,14 +20,15 @@ fn main(
   @builtin(global_invocation_id) global_id: vec3<u32>,
 ) {
     let itemsPerThread = u32(__ITEMS_PER_THREAD__);
-    let startIdx = global_id.x * itemsPerTread;
-    let ndIx = (global_id. + 1u) * itemsPerThread;
+    let startIdx = global_id.x * itemsPerThread;
+    let endIdx = (global_id.x + 1u) * itemsPerThread;
 
     for (var i = startIdx; i < endIdx; i++ ) {
          if (i >= vertexCount) {
             depthBuffer[i] = 999999.9f;
         } else {
             let pos = gsPositions[i];
+            // column-major
             let projPos = mvpMatrix * pos;
             depthBuffer[i] = projPos.z;
             depthIndex[i] = i;

@@ -1,8 +1,9 @@
-import { vertexShaderSource, fragmentShaderSource } from "./shaders/GSVSahders.js";
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4, float16ToFloat32 } from "./src/utils/mathUtils.js";
-import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture } from "./src/utils/utils.js";
+import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture, createErrorSystem } from "./src/utils/utils.js";
+import { BitonicSorter, DepthCalculator, IndexUnroller } from "./src/utils/WGPUSort.js";
 import { Manager } from "./src/Manager.js";
-import { GPUProfiler } from "./src/gpuProfiler.js";
+import { GPUProfiler } from "./src/GPUProfiler.js";
+import { GPUSorter } from "./src/GPUSorter.js";
 
 const ToolWorkerUrl = './src/workers/toolWorker.js';
 const PlyDownloaderUrl = './src/workers/plyDownloader.js';
@@ -40,23 +41,32 @@ let keyframes = [];
 let manager = new Manager();
 let plyTexData = new Uint32Array();
 let cbTexData = new Uint32Array();
+let gpuPositionData = new Float32Array();
 let playing = false;
 
 async function main() {
   let carousel = false;
+  let wgpuErrorSystem = null;
+  let profiler = null;
+  let gpuSorter = null;
   const params = new URLSearchParams(location.search);
   try {
     viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
     carousel = false;
   } catch (err) { }
 
+  const vertexShaderSource = await (await fetch('./shaders/gsv.vert')).text();
+  const fragmentShaderSource = await (await fetch('./shaders/gsv.frag')).text();
+  const depthShaderSource = await (await fetch('./shaders/calcDepths.wgsl')).text();
+  const sortShaderSource = await (await fetch('./shaders/bitonicSort.wgsl')).text();
+  const unrollShaderSource = await (await fetch('./shaders/unrollIndices.wgsl')).text();
+  // set up shader code
+  BitonicSorter.setShader(sortShaderSource);
+  DepthCalculator.setShader(depthShaderSource);
+  IndexUnroller.setShader(unrollShaderSource);
   // gpu device
   const device = await GPUProfiler.createGpuDevice();
-  if (device) {
-    // there is a gpu
-    document.getElementById("note2").innerText = 'sort by GPU!'
-    console.info(device);
-  }
+  const USEWGPU = (!!device && !params.get('use_cpu'));
 
   const toolWorker = new Worker(ToolWorkerUrl, { type: 'module' });
   const plyDownloader = new Worker(PlyDownloaderUrl, { type: 'module' });
@@ -174,11 +184,15 @@ async function main() {
 
   toolWorker.onmessage = async (e) => {
     if (e.data.texdata) {
-      const { texdata, texwidth, texheight } = e.data;
+      const { texdata, texwidth, texheight, vertexCount2Date } = e.data;
       // save the previous ply here
       plyTexData = texdata;
       setTexture(gl, gsTexture, texdata, texwidth, texheight, 0, '32rgbui');
       manager.appendOneBuffer(null, null, FTYPES.ply);
+      vertexCount = vertexCount2Date;
+      if (USEWGPU) {
+        gpuPositionData = e.data.positions;
+      }
       await sleep(100);
       // load next group
       let nextIdx = manager.getNextIndex(FTYPES.ply);
@@ -203,10 +217,10 @@ async function main() {
       }
     }
     else if (e.data.depthIndex) {
-      const { depthIndex, viewProj } = e.data;
+      const { depthIndex, viewProj, vertexCount2Date } = e.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, depthIndex, gl.DYNAMIC_DRAW);
-      vertexCount = e.data.vertexCount;
+      vtx2draw = vertexCount2Date;
     }
   };
 
@@ -220,20 +234,30 @@ async function main() {
         while (!manager.initCb) {
           await sleep(100);
         }
-        toolWorker.postMessage({
-          ply: data, extent: manager.initCb.extent, groupIdx: -1,
-          total: gsvMeta.total_gaussians, tex: plyTexData
-        }, [data.buffer, plyTexData.buffer]);
+        USEWGPU ?
+          toolWorker.postMessage({
+            ply: data, groupIdx: -1, positions: gpuPositionData,
+            total: gsvMeta.total_gaussians, tex: plyTexData, usegpu: USEWGPU
+          }, [data.buffer, plyTexData.buffer, gpuPositionData.buffer])
+          : toolWorker.postMessage({
+            ply: data, groupIdx: -1,
+            total: gsvMeta.total_gaussians, tex: plyTexData, usegpu: USEWGPU
+          }, [data.buffer, plyTexData.buffer]);
       } else {
         // check if the init ply is loaded & if the meta data is ready
         // to ensure in-order processing
         while (vertexCount == 0 || !manager.cbBuffer[keyframe] || !plyTexData) {
           await sleep(100);
         }
-        toolWorker.postMessage({
-          ply: data, extent: manager.initCb.extent, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
-          total: -1, tex: plyTexData
-        }, [data.buffer, plyTexData.buffer]);
+        USEWGPU ?
+          toolWorker.postMessage({
+            ply: data, groupIdx: -1, positions: gpuPositionData,
+            total: gsvMeta.total_gaussians, tex: plyTexData, usegpu: USEWGPU
+          }, [data.buffer, plyTexData.buffer, gpuPositionData.buffer])
+          : toolWorker.postMessage({
+            ply: data, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
+            total: -1, tex: plyTexData, usegpu: USEWGPU
+          }, [data.buffer, plyTexData.buffer]);
       }
       // if (keyframe == keyframes[keyframes.length - 1]) {
       //   document.getElementById("speed").innerText = '';
@@ -332,9 +356,39 @@ async function main() {
     throw new Error(e);
   }
 
-  const sortGS = (viewProj) => {
-    // TODO use gpu
-    device ? toolWorker.postMessage({ view: viewProj }) : toolWorker.postMessage({ view: viewProj });
+  const sortGS = async (viewProj) => {
+    // should work after profiler & gpuSorter initialized
+    if (USEWGPU && profiler && gpuSorter) {
+      wgpuErrorSystem?.startErrorScope('sort');
+      profiler.beginFrame();
+      // record commands
+      const cmdBuf = device.createCommandEncoder({
+        label: 'sort-cmd',
+      });
+      gpuSorter.cmdSortByDepth({
+        cmdBuf,
+        device,
+        profiler,
+        viewProj,
+        currentVertexCount: vertexCount,
+        positions: gpuPositionData
+      });
+      profiler.endFrame(cmdBuf);
+      device.queue.submit([cmdBuf.finish()]);
+      gpuSorter.getDepthIndex().then(res => {
+        if (res != null) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, res.depthIndex, gl.DYNAMIC_DRAW);
+          // number of sorted gs and number of restored gs are not the same due to asynchronization
+          vtx2draw = res.cnt;
+        }
+      })
+      profiler.scheduleReportIfNeededAsync((res) => { console.log('Profiler: ', res); });
+
+      wgpuErrorSystem?.reportErrorScopeAsync((lastError) => {
+        throw new Error(lastError);
+      });
+    } else { toolWorker.postMessage({ view: viewProj, currentVertexCount: vertexCount }) };
   }
 
   let activeKeys = [];
@@ -538,6 +592,7 @@ async function main() {
   // ** animation loop ** //
   let jumpDelta = 0;
   let vertexCount = 0;
+  let vtx2draw = 0;
 
   // time for last frame to control fps
   let lastFrame = 0;
@@ -620,6 +675,7 @@ async function main() {
     let actualViewMatrix = invert4(inv2);
     gl.uniform3fv(u_cameraCenter, new Float32Array([inv2[12], inv2[13], inv2[14]]));
 
+    // column-major
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
     sortGS(viewProj);
 
@@ -627,9 +683,8 @@ async function main() {
     const currentFps = 1000 / (now - lastFpsTime) || 0;
     avgFps = (isFinite(avgFps) && avgFps) * 0.9 + currentFps * 0.1;
 
-    if (vertexCount > 0) {
-      var elapsed = now - lastFrame;
-      // update the frame
+    if (vtx2draw > 0) {
+      var elapsed = now - lastFrame;      // update the frame
       gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
       if (manager.canPlay()) {
         if (elapsed > targetFPSInterval) {
@@ -664,7 +719,7 @@ async function main() {
         }
       }
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
+      gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vtx2draw);
     } else {
       gl.clear(gl.COLOR_BUFFER_BIT);
       lastFrame = now;
@@ -714,6 +769,23 @@ async function main() {
   gl.uniform1ui(u_gop, gsvMeta.GOP);
   gl.uniform1ui(u_overlap, gsvMeta.overlap);
   gl.uniform1ui(u_duration, gsvMeta.duration);
+
+  if (USEWGPU) {
+    // there is a gpu
+    document.getElementById("note2").innerText = 'sort by GPU!'
+    console.info(device);
+    wgpuErrorSystem = createErrorSystem(device);
+    wgpuErrorSystem?.startErrorScope('init');
+
+    // set up renderer
+    profiler = new GPUProfiler(device);
+    gpuSorter = new GPUSorter(device, gsvMeta.total_gaussians);
+
+    const lastError = await wgpuErrorSystem?.reportErrorScopeAsync();
+    if (lastError) {
+      throw new Error(lastError);
+    }
+  }
 
   const atlasPromise = fetch(`assets/${gsvMeta.image[0]}.bin`)
   const cameraPromise = fetch(new URL('cameras.json', baseUrl))

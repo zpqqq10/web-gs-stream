@@ -190,6 +190,24 @@ export const getItemsPerThread = (items, threads) => {
     return Math.ceil(items / threads);
 }
 
+export function createGPUBuffer(
+    device,
+    label,
+    // macro
+    usage,
+    // array
+    data
+) {
+    const gpuBuffer = device.createBuffer({
+        label,
+        size: data.byteLength,
+        usage,
+    });
+    //? or device.queue.writeBuffer(gpuBuffer, 0, data.buffer, 0);?
+    device.queue.writeBuffer(gpuBuffer, 0, data, 0);
+    return gpuBuffer;
+}
+
 export function writeMatrixToGPUBuffer(
     device,
     gpuBuffer,
@@ -198,6 +216,7 @@ export function writeMatrixToGPUBuffer(
 ) {
     // does not check type here
     // the caller should check the data type
+    //? in fact no need to use .buffer? 
     device.queue.writeBuffer(gpuBuffer, offsetBytes, data.buffer, 0);
 }
 
@@ -219,4 +238,46 @@ export function applyShaderTextReplace(
         code = code.replaceAll(k, v);
     });
     return code;
+}
+
+// to help webgpu debug
+export function createErrorSystem(device) {
+    const ERROR_SCOPES = [
+        'internal',
+        'out-of-memory',
+        'validation',
+    ];
+    const ERROR_SCOPES_REV = ERROR_SCOPES.toReversed();
+
+    let currentScopeName = '-';
+
+    return {
+        startErrorScope,
+        reportErrorScopeAsync,
+    };
+
+    function startErrorScope(scopeName) {
+        currentScopeName = scopeName;
+        ERROR_SCOPES.forEach((sc) => device.pushErrorScope(sc));
+    }
+
+    // cb: call back function
+    async function reportErrorScopeAsync(cb) {
+        let lastError = undefined;
+
+        for (const name of ERROR_SCOPES_REV) {
+            const err = await device.popErrorScope();
+            if (err) {
+                const msg = `WebGPU error [${currentScopeName}][${name}]: ${err.message}`;
+                lastError = msg;
+                if (cb) {
+                    cb(msg);
+                } else {
+                    console.error(msg);
+                }
+            }
+        }
+
+        return lastError;
+    }
 }

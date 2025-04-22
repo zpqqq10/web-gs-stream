@@ -3,6 +3,7 @@ import { packHalf2x16 } from "../utils/mathUtils.js";
 // the newest count, up to date
 let vertexCount2Date = 0;
 let viewProj;
+let sortedVertexCount = 0;
 let lastProj = [];
 let depthIndex = new Uint32Array();
 let lastVertexCount = 0;
@@ -14,16 +15,19 @@ let total;
 // total number of codebook indices
 let totalCB;
 let sortRunning;
+let cbRunning = false;
+let plyRunning = false;
 
 // sort the gaussians according to depth
 function runSort(viewProj) {
     if (!positions) return;
     // const f_buffer = new Float32Array(buffer);
-    if (lastVertexCount == vertexCount2Date) {
+    // TODO modify lastVertexCount
+    if (sortedVertexCount == vertexCount2Date) {
         let dist = Math.hypot(...[2, 6, 10].map((k) => lastProj[k] - viewProj[k]));
-        if (dist < 0.01) return;
+        if (dist < 0.001) return;
     } else {
-        lastVertexCount = vertexCount2Date;
+        sortedVertexCount = vertexCount2Date;
     }
 
     console.time("sort");
@@ -33,7 +37,7 @@ function runSort(viewProj) {
     let sizeList = new Int32Array(vertexCount2Date);
     for (let i = 0; i < vertexCount2Date; i++) {
         let depth =
-            ((viewProj[2] * positions[3 * i + 0] + viewProj[6] * positions[3 * i + 1] + viewProj[10] * positions[3 * i + 2]) * 4096) | 0;
+            ((viewProj[2] * positions[4 * i + 0] + viewProj[6] * positions[4 * i + 1] + viewProj[10] * positions[4 * i + 2]) * 4096) | 0;
         sizeList[i] = depth;
         if (depth > maxDepth) maxDepth = depth;
         if (depth < minDepth) minDepth = depth;
@@ -54,7 +58,7 @@ function runSort(viewProj) {
 
     console.timeEnd("sort");
     lastProj = viewProj;
-    postMessage({ depthIndex, viewProj, vertexCount: vertexCount2Date }, [depthIndex.buffer]);
+    postMessage({ depthIndex, viewProj, vertexCount2Date }, [depthIndex.buffer]);
 }
 
 const throttledSort = () => {
@@ -72,7 +76,8 @@ const throttledSort = () => {
 };
 
 // process the buffer containing a ply
-function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
+function processPlyBuffer(inputBuffer, groupIdx, texdata, usegpu) {
+    plyRunning = true;
     const ubuf = new Uint8Array(inputBuffer);
     const cbOffset = (groupIdx == -1) ? 0 : (2048 * groupIdx + 1024);
     // 10KB ought to be enough for a header...
@@ -130,14 +135,13 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
     var texheight = Math.ceil((3 * total) / texwidth); // Set to your desired height
     if (texdata.byteLength == 0) {
         texdata = new Uint32Array(texwidth * texheight * 3); // 3 components per pixel (RGB)
-        positions = new Float32Array(total * 3);
+        positions = new Float32Array(total * 4);
     }
     // compress all into 8 32-bit numbers
     var texdata_c = new Uint8ClampedArray(texdata.buffer);
     // to store the frame index, uint16
     var texdata_t = new Uint16Array(texdata.buffer);
     var texdata_f = new Float32Array(texdata.buffer);
-    // console.log(vertexCount2Date, lastVertexCount, lastVertexCount == vertexCount2Date);
     console.time("build texture");
     for (let j = 0; j < vertexCount; j++) {
         row = j;
@@ -145,9 +149,10 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
         let joffset = j + lastVertexCount;
 
         // first 3 32-bit are used for XYZ
-        positions[3 * joffset + 0] = attrs.x;
-        positions[3 * joffset + 1] = attrs.y;
-        positions[3 * joffset + 2] = attrs.z;
+        positions[4 * joffset + 0] = attrs.x;
+        positions[4 * joffset + 1] = attrs.y;
+        positions[4 * joffset + 2] = attrs.z;
+        positions[4 * joffset + 3] = 1.;
 
         texdata_f[9 * joffset + 0] = attrs.x;
         texdata_f[9 * joffset + 1] = attrs.y;
@@ -208,12 +213,17 @@ function processPlyBuffer(inputBuffer, extent, groupIdx, texdata) {
     }
     console.timeEnd("build texture");
     // console.info({ groupIdx, ply: true })
-    postMessage({ texdata, texwidth, texheight }, [texdata.buffer]);
-    return vertexCount + lastVertexCount;
+    vertexCount2Date = vertexCount + lastVertexCount;
+    lastVertexCount = vertexCount2Date;
+    usegpu ? postMessage({ texdata, texwidth, texheight, positions, vertexCount2Date }, [texdata.buffer, positions.buffer])
+        : postMessage({ texdata, texwidth, texheight, vertexCount2Date }, [texdata.buffer]);
+    plyRunning = false;
+    return;
 }
 
 // process the buffer containing a codebook
 function processCodebook(inputBuffer, groupIdx, cbtexdata) {
+    cbRunning = true;
     const ubuf = new Uint16Array(inputBuffer);
     const count = (groupIdx == -1) ? 1024 : 2048;
     const begin_offset = (groupIdx == -1) ? 0 : (2048 * groupIdx + 1024);
@@ -255,6 +265,7 @@ function processCodebook(inputBuffer, groupIdx, cbtexdata) {
     }
     console.timeEnd("build cb texture");
     // console.info(groupIdx)
+    cbRunning = false;
     postMessage({ cbtexdata, texwidth, texheight }, [cbtexdata.buffer]);
 }
 
@@ -266,11 +277,24 @@ onmessage = (e) => {
         if (e.data.total > 0) {
             total = e.data.total;
         }
+        while (plyRunning) {
+            setTimeout(() => {
+                // wait for last processing to finish
+            }, 100);
+        }
+        if (e.data.usegpu) {
+            positions = e.data.positions;
+        }
         // uint8array here
-        vertexCount2Date = processPlyBuffer(e.data.ply.buffer, e.data.extent, e.data.groupIdx, e.data.tex);
+        processPlyBuffer(e.data.ply.buffer, e.data.groupIdx, e.data.tex, e.data.usegpu);
     } else if (e.data.cb) {
         if (e.data.total > 0) {
             totalCB = e.data.total;
+        }
+        while (cbRunning) {
+            setTimeout(() => {
+                // wait for last processing to finish
+            }, 100);
         }
         processCodebook(e.data.cb, e.data.groupIdx, e.data.tex);
     }
