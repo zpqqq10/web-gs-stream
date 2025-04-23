@@ -1,6 +1,6 @@
 import { BYTES_F32, BYTES_U32 } from './utils/utils.js';
 import { nearestPowerOf2_ceil } from './utils/mathUtils.js';
-import { DepthCalculator, BitonicSorter } from './utils/WGPUSort.js';
+import { DepthCalculator, BitonicSorter, RadixSorter } from './utils/WGPUSort.js';
 
 export class GPUSorter {
     constructor(device, totalGS) {
@@ -21,6 +21,7 @@ export class GPUSorter {
             this.indicesBuffer,
             totalGS
         );
+        // this.radixSorter = new RadixSorter(device);
         this.bitonicSorter = new BitonicSorter(
             device,
             this.itemCountCeilPwr2,
@@ -79,6 +80,8 @@ export class GPUSorter {
 
             // sort by depth
             this.bitonicSorter.cmdSort(ctx);
+            // very slow...
+            // this.radixSorter.cmdSort({ ...ctx, distancesBuffer: this.distancesBuffer, indicesBuffer: this.indicesBuffer });
 
             // unroll indices to the form the renderer expects
             cmdBuf.copyBufferToBuffer(this.indicesBuffer, 0, this.depthIndexReadBuffer, 0, this.indicesBuffer.size);

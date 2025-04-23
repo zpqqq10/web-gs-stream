@@ -25,7 +25,7 @@ fn main(
 
     for (var i = startIdx; i < endIdx; i++ ) {
          if (i >= vertexCount) {
-            depthBuffer[i] = 999999.9f;
+            depthBuffer[i] = 9999.9999f;
         } else {
             let pos = gsPositions[i];
             // column-major

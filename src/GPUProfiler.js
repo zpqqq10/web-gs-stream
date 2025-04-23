@@ -92,9 +92,7 @@ export class GPUProfiler {
   }
 
   beginFrame() {
-    while (this.currentFrameScopes.length > 0) {
-      this.currentFrameScopes.pop();
-    }
+    this.currentFrameScopes = [];
   }
 
   // cmdBuf: GPUCommandEncoder
@@ -134,6 +132,7 @@ export class GPUProfiler {
     if (this.resultsBuffer.mapState === 'unmapped') {
       await this.resultsBuffer.mapAsync(GPUMapMode.READ);
       const times = new BigInt64Array(this.resultsBuffer.getMappedRange());
+      let totaltime = 0;
       const result = scopeNames.map(
         (name, idx) => {
           // all on gpu
@@ -141,12 +140,14 @@ export class GPUProfiler {
           const start = times[idx * QUERIES_PER_PASS];
           const end = times[idx * QUERIES_PER_PASS + 1];
           time = Number(end - start) * NANO_TO_MILISECONDS;
+          totaltime += time;
           return [name, time];
         }
       );
       this.resultsBuffer.unmap();
 
       onResult?.(result);
+      // onResult?.(totaltime);
     }
   }
 

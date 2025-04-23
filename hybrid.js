@@ -1,6 +1,6 @@
 import { getProjectionMatrix, getViewMatrix, rotate4, multiply4, invert4, translate4, float16ToFloat32 } from "./src/utils/mathUtils.js";
 import { attachShaders, preventDefault, padZeroStart, FTYPES, sleep, setTexture, createErrorSystem } from "./src/utils/utils.js";
-import { BitonicSorter, DepthCalculator, IndexUnroller } from "./src/utils/WGPUSort.js";
+import { BitonicSorter, DepthCalculator } from "./src/utils/WGPUSort.js";
 import { Manager } from "./src/Manager.js";
 import { GPUProfiler } from "./src/GPUProfiler.js";
 import { GPUSorter } from "./src/GPUSorter.js";
@@ -63,7 +63,6 @@ async function main() {
   // set up shader code
   BitonicSorter.setShader(sortShaderSource);
   DepthCalculator.setShader(depthShaderSource);
-  IndexUnroller.setShader(unrollShaderSource);
   // gpu device
   const device = await GPUProfiler.createGpuDevice();
   const USEWGPU = (!!device && !params.get('use_cpu'));
@@ -251,8 +250,8 @@ async function main() {
         }
         USEWGPU ?
           toolWorker.postMessage({
-            ply: data, groupIdx: -1, positions: gpuPositionData,
-            total: gsvMeta.total_gaussians, tex: plyTexData, usegpu: USEWGPU
+            ply: data, groupIdx: parseInt(keyframe) / gsvMeta.GOP, positions: gpuPositionData,
+            total: -1, tex: plyTexData, usegpu: USEWGPU
           }, [data.buffer, plyTexData.buffer, gpuPositionData.buffer])
           : toolWorker.postMessage({
             ply: data, groupIdx: parseInt(keyframe) / gsvMeta.GOP,
@@ -357,9 +356,13 @@ async function main() {
   }
 
   const sortGS = async (viewProj) => {
+    if (vertexCount <= 0) {
+      return;
+    }
     // should work after profiler & gpuSorter initialized
     if (USEWGPU && profiler && gpuSorter) {
       wgpuErrorSystem?.startErrorScope('sort');
+      // profiler.profileNextFrame(true);
       profiler.beginFrame();
       // record commands
       const cmdBuf = device.createCommandEncoder({

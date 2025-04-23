@@ -8,6 +8,7 @@ import {
     BYTES_U32,
     createGPUBuffer
 } from './utils.js';
+import { RadixSortKernel } from './WebGPU-Radix-Sort/index.js';
 
 export class DepthCalculator {
     // save the name as a static member
@@ -124,6 +125,41 @@ export class DepthCalculator {
 
     static setShader = (text) => {
         this.SHADER_CODE = text;
+    }
+}
+
+
+export class RadixSorter {
+    static NAME = RadixSorter.name;
+
+    constructor(
+        device
+    ) {
+        this.device = device;
+    }
+
+    cmdSort(ctx) {
+        const { cmdBuf, profiler, currentVertexCount, distancesBuffer, indicesBuffer } = ctx;
+        const kernel = new RadixSortKernel({
+            device: this.device,
+            // depth
+            keys: distancesBuffer,
+            values: indicesBuffer,
+            count: currentVertexCount,
+            bit_count: 32,
+            workgroup_size: { x: 16, y: 16 },
+            check_order: true,
+            local_shuffle: false,
+            avoid_bank_conflicts: false,
+        })
+
+        const computePass = cmdBuf.beginComputePass({
+            label: "radix-sorter",
+            timestampWrites: profiler?.createScopeGpu(RadixSorter.NAME),
+        });
+        kernel.dispatch(computePass);
+        computePass.end();
+
     }
 }
 
@@ -269,90 +305,6 @@ export class BitonicSorter {
                 },
             ],
         });
-
-    static setShader = (text) => {
-        this.SHADER_CODE = text;
-    }
-}
-
-export class IndexUnroller {
-    static NAME = IndexUnroller.name;
-    static NUM_THREADS = 64;
-    static SHADER_CODE = '';
-
-    constructor(
-        device,
-        // GPUBuffer,
-        indicesBuffer,
-        // GPUBuffer,
-        unrolledIndicesBuffer,
-        // int, total number of gs of whole video
-        total_gs
-    ) {
-        assertHasInjectedShader(IndexUnroller);
-        const itemsPerThread = getItemsPerThread(
-            total_gs,
-            IndexUnroller.NUM_THREADS
-        );
-
-        this.vertexCountBuffer = device.createBuffer({
-            label: 'index-unroller-vertexCount',
-            size: BYTES_U32,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
-        this.pipeline = IndexUnroller.createPipeline(device, itemsPerThread);
-
-        this.uniformsBindings = device.createBindGroup({
-            layout: this.pipeline.getBindGroupLayout(0),
-            entries: [
-                {
-                    binding: 0,
-                    resource: { buffer: indicesBuffer },
-                },
-                {
-                    binding: 1,
-                    resource: { buffer: unrolledIndicesBuffer },
-                },
-                {
-                    binding: 2,
-                    resource: { buffer: this.vertexCountBuffer },
-                },
-            ],
-        });
-    }
-
-    static createPipeline(device,
-        // int 
-        itemsPerThread) {
-        const code = applyShaderTextReplace(IndexUnroller.SHADER_CODE, {
-            __ITEMS_PER_THREAD__: '' + itemsPerThread,
-            __VERTICES_PER_SPLAT__: '1',
-        });
-        const shaderModule = device.createShaderModule({ code });
-        return device.createComputePipeline({
-            layout: 'auto',
-            compute: {
-                module: shaderModule,
-                entryPoint: 'main',
-            },
-        });
-    }
-
-    cmdUnrollIndices(ctx) {
-        const { device, cmdBuf, profiler, currentVertexCount } = ctx;
-
-        writeMatrixToGPUBuffer(device, this.vertexCountBuffer, 0, new Uint32Array([currentVertexCount]));
-
-        const computePass = cmdBuf.beginComputePass({
-            label: 'index-unroller',
-            timestampWrites: profiler?.createScopeGpu(IndexUnroller.NAME),
-        });
-        computePass.setPipeline(this.pipeline);
-        computePass.setBindGroup(0, this.uniformsBindings);
-        computePass.dispatchWorkgroups(IndexUnroller.NUM_THREADS);
-        computePass.end();
-    }
 
     static setShader = (text) => {
         this.SHADER_CODE = text;
