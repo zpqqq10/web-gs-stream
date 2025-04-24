@@ -2,7 +2,7 @@
 var<storage, read> gsPositions: array<vec4f>;
 
 @group(0) @binding(1)
-var<storage, read_write> depthBuffer: array<f32>;
+var<storage, read_write> depthBuffer: array<u32>;
 
 // unsorted here temporarily
 @group(0) @binding(2)
@@ -25,12 +25,15 @@ fn main(
 
     for (var i = startIdx; i < endIdx; i++ ) {
          if (i >= vertexCount) {
-            depthBuffer[i] = 9999.9999f;
+            // depthBuffer[i] = 9999.9999f;
+            // interpreted as uint32, which is similar to 3dgs
+            depthBuffer[i] = bitcast<u32>(9999.9999f);
         } else {
             let pos = gsPositions[i];
             // column-major
             let projPos = mvpMatrix * pos;
-            depthBuffer[i] = projPos.z;
+            // depthBuffer[i] = projPos.z;
+            depthBuffer[i] = bitcast<u32>(projPos.z);
             depthIndex[i] = i;
         }
     }

@@ -17,7 +17,7 @@ let totalCB;
 let sortRunning;
 let cbRunning = false;
 let plyRunning = false;
-const BUCKETS = 4096 * 4096;
+const BUCKETS = 2048 * 2048;
 
 // sort the gaussians according to depth
 function runSort(viewProj) {

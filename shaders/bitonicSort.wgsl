@@ -7,7 +7,7 @@ struct Uniforms {
 var<storage, read_write> depthIndex: array<u32>;
 
 @group(0) @binding(1)
-var<storage, read_write> depthBuffer: array<f32>;
+var<storage, read_write> depthBuffer: array<u32>;
 
 @group(0) @binding(2)
 var<uniform> uniforms: Uniforms;

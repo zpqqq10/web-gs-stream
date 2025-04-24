@@ -3,7 +3,7 @@ import { nearestPowerOf2_ceil } from './utils/mathUtils.js';
 import { DepthCalculator, BitonicSorter, RadixSorter } from './utils/WGPUSort.js';
 
 export class GPUSorter {
-    constructor(device, totalGS) {
+    constructor(device, totalGS, useBitonic = true) {
         this.itemCountCeilPwr2 = nearestPowerOf2_ceil(totalGS);
 
         const [indicesBuffer, distancesBuffer, depthIndexReadBuffer] = GPUSorter.createBuffers(
@@ -21,13 +21,14 @@ export class GPUSorter {
             this.indicesBuffer,
             totalGS
         );
-        // this.radixSorter = new RadixSorter(device);
-        this.bitonicSorter = new BitonicSorter(
-            device,
-            this.itemCountCeilPwr2,
-            this.indicesBuffer,
-            this.distancesBuffer
-        );
+        this.sorter = useBitonic ?
+            new BitonicSorter(
+                device,
+                this.itemCountCeilPwr2,
+                this.indicesBuffer,
+                this.distancesBuffer
+            )
+            : new RadixSorter(device);
 
         this.sortRunning = false;
         this.lastView = null;
@@ -47,7 +48,8 @@ export class GPUSorter {
         });
         const distancesBuffer = device.createBuffer({
             label: 'GPUSorter.distances-buffer',
-            size: itemCountCeilPwr2 * BYTES_F32,
+            size: itemCountCeilPwr2 * BYTES_U32,
+            // size: itemCountCeilPwr2 * BYTES_F32,
             usage: GPUBufferUsage.STORAGE,
         });
 
@@ -79,8 +81,8 @@ export class GPUSorter {
             this.depthCalculator.cmdCalcDepths(ctx);
 
             // sort by depth
-            this.bitonicSorter.cmdSort(ctx);
-            // very slow...
+            // very slow for radix sort...
+            this.sorter.cmdSort({ ...ctx, distancesBuffer: this.distancesBuffer, indicesBuffer: this.indicesBuffer });
             // this.radixSorter.cmdSort({ ...ctx, distancesBuffer: this.distancesBuffer, indicesBuffer: this.indicesBuffer });
 
             // unroll indices to the form the renderer expects
