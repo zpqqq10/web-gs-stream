@@ -1,5 +1,6 @@
 import { FTYPES } from "../utils/utils.js";
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
+import { loadPyodide } from "https://fastly.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
+// import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
 // import { loadPyodide } from "../utils/pyodide/pyodide.mjs";
 let videoDownloader = null;
 
